@@ -183,3 +183,15 @@ def test_browser_fallback_only_for_blocks():
     sources.tune_for(url, fresh)
     assert fresh["_vb_browser"] == "firefox"
     sources._browser_hosts.clear()
+
+
+def test_coursera_links_are_recognised():
+    from app.engine import extractor  # noqa: F401  (registers the extractors)
+    from app.engine.sources import identify, match_extractor
+
+    lecture = "https://www.coursera.org/learn/python-operating-system/lecture/WfTNB/getting-familiar"
+    assert match_extractor(lecture) == "CourseraLecture"
+    assert match_extractor("https://www.coursera.org/learn/python-operating-system/item/WfTNB") == "CourseraLecture"
+    assert match_extractor("https://www.coursera.org/learn/python-operating-system") == "CourseraCourse"
+    assert match_extractor("https://www.coursera.org/learn/python-operating-system/home/module/1") == "CourseraCourse"
+    assert identify(lecture).name == "Coursera"

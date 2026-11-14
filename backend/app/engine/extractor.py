@@ -7,12 +7,13 @@ from typing import Any
 import yt_dlp
 
 from .errors import EngineError, classify
-from . import cookies, gdrive
+from . import cookies, coursera, gdrive
 from .runtime import ffmpeg_location
 from .sources import browser_fallbacks, identify, install_browser_choice, remember_browser, tune_for, use_browser
 
 log = logging.getLogger("haul.extractor")
 gdrive.install()
+coursera.register()
 install_browser_choice()
 
 AUDIO_TARGETS = [

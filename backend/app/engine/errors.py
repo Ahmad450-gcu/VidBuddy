@@ -18,6 +18,8 @@ class EngineError(Exception):
 _RULES: list[tuple[str, str, str]] = [
     (r"google drive: the signed-in account can't open", "auth",
      "The Google account in your sign-in cookies can't open this Drive file. Upload cookies from the account that has access."),
+    (r"coursera: this lecture needs a signed-in", "auth",
+     "This Coursera lecture needs your sign-in. Add cookies from coursera.org (signed in, enrolled in the course) in Settings."),
     (r"google drive: this file isn't public", "auth",
      "This Drive file isn't public. If your Google account can play it, add sign-in cookies from drive.google.com in Settings."),
     (r"unsupported url|no suitable (info)?extractor", "unsupported", "This site or link isn't supported."),
