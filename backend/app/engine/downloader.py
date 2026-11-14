@@ -19,7 +19,7 @@ import yt_dlp
 from .errors import EngineError, classify
 from .extractor import _QuietLogger, base_options
 from .security import UnsafeInputError, validate_template
-from .sources import tune_for
+from .sources import browser_fallbacks, remember_browser, tune_for, use_browser
 
 log = logging.getLogger("haul.downloader")
 
@@ -219,48 +219,66 @@ def run_download(
     opts["progress_hooks"] = [hook]
     opts["postprocessor_hooks"] = [pp_hook]
 
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                raise EngineError("unavailable", "Nothing was downloaded.")
-            if info.get("_type") == "playlist":
-                raise EngineError("unsupported", "Playlists must be queued per item.")
+    fallbacks: list[str] | None = None
+    while True:
+        try:
+            result = _download_once(url, options, opts, logger, should_stop, on_progress)
+            remember_browser(url, opts)
+            return result
+        except JobInterrupted:
+            raise
+        except yt_dlp.utils.DownloadCancelled as e:
+            raise classify(e) from e
+        except yt_dlp.utils.DownloadError as e:
+            # a JobInterrupted raised inside a hook can be wrapped by yt-dlp
+            if isinstance(getattr(e, "exc_info", (None, None))[1], JobInterrupted):
+                raise e.exc_info[1]  # type: ignore[misc]
             reason = should_stop()
             if reason:
-                raise JobInterrupted(reason)
-            downloads = info.get("requested_downloads") or []
-            fp = downloads[0].get("filepath") if downloads else info.get("filepath")
-            if not fp or not Path(fp).exists():
-                raise EngineError("processing", "The download finished but the output file is missing.",
-                                  "; ".join(logger.warnings[-3:]))
-            filepath = Path(fp)
-            thumb_bytes, thumb_ext = _fetch_thumbnail(ydl, info)
-            subs: list[Path] = []
-            if options.subtitles and options.kind == "video":
-                on_progress(Progress(stage="subtitles", fraction=0.999))
-                subs = fetch_subtitles(url, options, filepath, should_stop)
-            return DownloadResult(filepath, ydl.sanitize_info(info), subs, thumb_bytes, thumb_ext)
-    except JobInterrupted:
-        raise
-    except yt_dlp.utils.DownloadCancelled as e:
-        raise classify(e) from e
-    except yt_dlp.utils.DownloadError as e:
-        # a JobInterrupted raised inside a hook can be wrapped by yt-dlp
-        if isinstance(getattr(e, "exc_info", (None, None))[1], JobInterrupted):
-            raise e.exc_info[1]  # type: ignore[misc]
+                raise JobInterrupted(reason) from e
+            err = classify(e)
+            if fallbacks is None:
+                fallbacks = browser_fallbacks(url, opts, err.code, err.detail)
+            if fallbacks:
+                client = fallbacks.pop(0)
+                log.info("Site refused the download; retrying as %s", client or "Chrome")
+                use_browser(opts, client)
+                parts.clear()
+                continue
+            raise err from e
+        except (EngineError, UnsafeInputError):
+            raise
+        except Exception as e:
+            reason = should_stop()
+            if reason:
+                raise JobInterrupted(reason) from e
+            log.exception("Unexpected download failure")
+            raise classify(e) from e
+
+
+def _download_once(url: str, options: DownloadOptions, opts: dict[str, Any], logger: _QuietLogger,
+                   should_stop: Callable[[], str | None], on_progress: ProgressCb) -> DownloadResult:
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        if not info:
+            raise EngineError("unavailable", "Nothing was downloaded.")
+        if info.get("_type") == "playlist":
+            raise EngineError("unsupported", "Playlists must be queued per item.")
         reason = should_stop()
         if reason:
-            raise JobInterrupted(reason) from e
-        raise classify(e) from e
-    except (EngineError, UnsafeInputError):
-        raise
-    except Exception as e:
-        reason = should_stop()
-        if reason:
-            raise JobInterrupted(reason) from e
-        log.exception("Unexpected download failure")
-        raise classify(e) from e
+            raise JobInterrupted(reason)
+        downloads = info.get("requested_downloads") or []
+        fp = downloads[0].get("filepath") if downloads else info.get("filepath")
+        if not fp or not Path(fp).exists():
+            raise EngineError("processing", "The download finished but the output file is missing.",
+                              "; ".join(logger.warnings[-3:]))
+        filepath = Path(fp)
+        thumb_bytes, thumb_ext = _fetch_thumbnail(ydl, info)
+        subs: list[Path] = []
+        if options.subtitles and options.kind == "video":
+            on_progress(Progress(stage="subtitles", fraction=0.999))
+            subs = fetch_subtitles(url, options, filepath, should_stop)
+        return DownloadResult(filepath, ydl.sanitize_info(info), subs, thumb_bytes, thumb_ext)
 
 
 def glob_escape(s: str) -> str:

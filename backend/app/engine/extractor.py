@@ -9,10 +9,11 @@ import yt_dlp
 from .errors import EngineError, classify
 from . import cookies, gdrive
 from .runtime import ffmpeg_location
-from .sources import identify, tune_for
+from .sources import browser_fallbacks, identify, install_browser_choice, remember_browser, tune_for, use_browser
 
 log = logging.getLogger("haul.extractor")
 gdrive.install()
+install_browser_choice()
 
 AUDIO_TARGETS = [
     {"id": "mp3", "label": "MP3", "lossy": True},
@@ -200,16 +201,26 @@ def analyze(url: str, *, timeout: int = 30, max_playlist_items: int = 500) -> di
         "lazy_playlist": False,
     })
     tune_for(url, opts, source.extractor if source.extractor != "Generic" else None)
-    try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            info = ydl.sanitize_info(info)
-    except yt_dlp.utils.DownloadError as e:
-        raise classify(e) from e
-    except EngineError:
-        raise
-    except Exception as e:  # extractor bugs surface as arbitrary exceptions
-        raise classify(e) from e
+    fallbacks: list[str] | None = None
+    while True:
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                info = ydl.sanitize_info(info)
+            remember_browser(url, opts)
+            break
+        except EngineError:
+            raise
+        except Exception as e:  # DownloadError, or extractor bugs as arbitrary exceptions
+            err = classify(e)
+            if fallbacks is None:
+                fallbacks = browser_fallbacks(url, opts, err.code, err.detail)
+            if fallbacks:
+                client = fallbacks.pop(0)
+                log.info("%s refused the request; retrying as %s", source.domain, client or "Chrome")
+                use_browser(opts, client)
+                continue
+            raise err from e
     if not info:
         raise EngineError("unavailable", "Nothing downloadable was found at this link.")
 

@@ -164,3 +164,22 @@ def test_updater_helpers(tmp_path):
     (engine / "2020.1.1").mkdir(parents=True)
     assert updater.activate(engine) is None
     assert not (engine / "2020.1.1").exists()
+
+
+def test_browser_fallback_only_for_blocks():
+    from app.engine import sources
+
+    url = "https://www.example-blocked.test/video/1"
+    opts: dict = {}
+    assert sources.browser_fallbacks(url, opts, "unavailable", "HTTP Error 404") == []
+    tries = sources.browser_fallbacks(url, opts, "forbidden", "HTTP Error 403: Forbidden")
+    assert tries == list(sources.BROWSERS)
+    sources.use_browser(opts, tries[1])
+    assert opts["_vb_browser"] == "firefox" and opts["extractor_args"]["generic"]["impersonate"] == ["firefox"]
+    assert "firefox" not in sources.browser_fallbacks(url, opts, "unknown", "Got client challenge webpage")
+    assert not sources.needs_browser(url)
+    sources.remember_browser(url, opts)
+    fresh: dict = {}
+    sources.tune_for(url, fresh)
+    assert fresh["_vb_browser"] == "firefox"
+    sources._browser_hosts.clear()
