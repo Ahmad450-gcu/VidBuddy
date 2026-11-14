@@ -1,0 +1,232 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Haul design tokens
+   Warm graphite surfaces, a single amber signal colour, Geist type.
+   Surfaces step up in lightness (dark) / down (light) to express elevation
+   instead of shadows and borders everywhere.
+--------------------------------------------------------------------------- */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0e0e10;
+  --surface-1: #151517;
+  --surface-2: #1c1c1f;
+  --surface-3: #252529;
+  --surface-inverse: #ededef;
+  --line: rgb(255 255 255 / 0.07);
+  --line-strong: rgb(255 255 255 / 0.13);
+  --text: #ededef;
+  --text-2: #a3a3ab;
+  --text-3: #6e6e77;
+  --accent: #ffb547;
+  --accent-hover: #ffc46b;
+  --accent-soft: rgb(255 181 71 / 0.12);
+  --accent-fg: #1d1305;
+  --success: #45c486;
+  --success-soft: rgb(69 196 134 / 0.12);
+  --danger: #f2615c;
+  --danger-soft: rgb(242 97 92 / 0.12);
+  --info: #7aa7ff;
+  --info-soft: rgb(122 167 255 / 0.12);
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 0 0 1px var(--line-strong);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f7f6f3;
+  --surface-1: #ffffff;
+  --surface-2: #f0eee9;
+  --surface-3: #e6e3dc;
+  --surface-inverse: #17161a;
+  --line: rgb(23 22 26 / 0.08);
+  --line-strong: rgb(23 22 26 / 0.15);
+  --text: #17161a;
+  --text-2: #5c5a62;
+  --text-3: #8c8a92;
+  --accent: #c97a00;
+  --accent-hover: #b06a00;
+  --accent-soft: rgb(201 122 0 / 0.1);
+  --accent-fg: #ffffff;
+  --success: #1f8a57;
+  --success-soft: rgb(31 138 87 / 0.1);
+  --danger: #d23b36;
+  --danger-soft: rgb(210 59 54 / 0.1);
+  --info: #2f63d6;
+  --info-soft: rgb(47 99 214 / 0.1);
+  --scrim: rgb(23 22 26 / 0.4);
+  --shadow-pop: 0 12px 32px -10px rgb(23 22 26 / 0.25), 0 0 0 1px var(--line-strong);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-inverse: var(--surface-inverse);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--text);
+  --color-fg-2: var(--text-2);
+  --color-fg-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-scrim: var(--scrim);
+  --shadow-pop: var(--shadow-pop);
+  --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    font-feature-settings: 'ss01', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  input[type='range'] {
+    accent-color: var(--accent);
+  }
+  dialog::backdrop {
+    background: var(--scrim);
+    backdrop-filter: blur(2px);
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+/* Motion: quiet, short, and off for people who ask for that */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes indeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+.animate-rise { animation: rise-in 220ms var(--ease-out-soft) both; }
+.animate-fade { animation: fade-in 160ms ease-out both; }
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0, var(--surface-3) 40%, var(--surface-2) 80%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Range sliders used by the players */
+.haul-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  background: transparent;
+  width: 100%;
+  cursor: pointer;
+  --pct: 0%;
+  --buf: 0%;
+}
+.haul-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) var(--pct), rgb(255 255 255 / 0.35) var(--pct), rgb(255 255 255 / 0.35) var(--buf), rgb(255 255 255 / 0.15) var(--buf));
+}
+.haul-range.on-surface::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--accent) var(--pct), var(--surface-3) var(--pct));
+}
+.haul-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.2);
+}
+.haul-range.on-surface::-moz-range-track { background: var(--surface-3); }
+.haul-range::-moz-range-progress { height: 4px; border-radius: 999px; background: var(--accent); }
+.haul-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  margin-top: -5px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+  transition: transform 120ms;
+}
+.haul-range:hover::-webkit-slider-thumb { transform: scale(1.15); }
+.haul-range::-moz-range-thumb {
+  width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff;
+}

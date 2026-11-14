@@ -1,0 +1,9 @@
+fastapi==0.162.7
+uvicorn[standard]==0.54.0
+pydantic==2.14.3
+pydantic-settings==2.16.3
+yt-dlp[default]==2026.10.26
+yt-dlp-ejs==0.8.0
+curl_cffi==0.17.0
+mutagen==1.48.1
+imageio-ffmpeg==0.8.1

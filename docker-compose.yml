@@ -1,0 +1,36 @@
+# docker compose up -d   → http://localhost:8000
+# For phones/tablets you need HTTPS: enable the `https` profile (Caddy) and set HAUL_DOMAIN.
+services:
+  haul:
+    build: .
+    image: haul:1.0.0
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${HAUL_PORT:-8000}:8000"
+    volumes:
+      - haul-data:/data
+      # Uncomment to keep media in a host folder instead of the named volume:
+      # - ./media:/data/media
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+  caddy:
+    profiles: ["https"]
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      HAUL_DOMAIN: ${HAUL_DOMAIN:?set HAUL_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [haul]
+
+volumes:
+  haul-data:
+  caddy-data:

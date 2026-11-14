@@ -1,0 +1,8 @@
+# Automatic HTTPS for Haul. PWAs (install, service worker, share target) need HTTPS.
+{$HAUL_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy haul:8000 {
+		# keep Server-Sent Events streaming
+		flush_interval -1
+	}
+}
