@@ -254,5 +254,6 @@ export interface CookieStatus {
   count: number
   sites: string[]
   youtube: boolean
+  google?: boolean
   updated_at: number | null
 }

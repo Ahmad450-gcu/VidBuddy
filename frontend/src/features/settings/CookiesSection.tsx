@@ -28,7 +28,12 @@ export function CookiesSection() {
     try {
       const next = await api.saveCookies(await file.text())
       setStatus(next)
-      toast({ tone: 'success', title: 'Cookies saved', body: next.youtube ? 'YouTube sign-in is active.' : `${next.count} cookies for ${next.sites.length} sites.` })
+      const signIns = [next.youtube && 'YouTube', next.google && 'Google Drive'].filter(Boolean)
+      toast({
+        tone: 'success',
+        title: 'Cookies saved',
+        body: signIns.length ? `Signed in for ${signIns.join(' and ')}.` : `${next.count} cookies for ${next.sites.slice(0, 3).join(', ')}.`,
+      })
     } catch (e) {
       toastError(e, "Couldn't use that file")
     } finally {
@@ -56,7 +61,7 @@ export function CookiesSection() {
       </div>
 
       <ol className="list-decimal space-y-1 pl-5 text-[12.5px] text-fg-2">
-        <li>Open a <strong>private/incognito window</strong> and sign in to the site (e.g. YouTube) with an account that can watch the video.</li>
+        <li>Open a <strong>private/incognito window</strong> and sign in to the site (e.g. YouTube or Google Drive) with an account that can watch the video.</li>
         <li>Export cookies in Netscape <code className="font-mono">cookies.txt</code> format, e.g. with the “Get cookies.txt LOCALLY” browser extension.</li>
         <li>Close that private window (so the site doesn't rotate the cookies), then upload the file here.</li>
       </ol>

@@ -16,6 +16,10 @@ class EngineError(Exception):
 
 
 _RULES: list[tuple[str, str, str]] = [
+    (r"google drive: the signed-in account can't open", "auth",
+     "The Google account in your sign-in cookies can't open this Drive file. Upload cookies from the account that has access."),
+    (r"google drive: this file isn't public", "auth",
+     "This Drive file isn't public. If your Google account can play it, add sign-in cookies from drive.google.com in Settings."),
     (r"unsupported url|no suitable (info)?extractor", "unsupported", "This site or link isn't supported."),
     (r"drm|widevine|playready", "drm", "This media is DRM-protected and can't be downloaded."),
     (r"not a bot", "blocked", "The site temporarily blocked automated access. Try again later."),

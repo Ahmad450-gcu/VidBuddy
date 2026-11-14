@@ -7,11 +7,12 @@ from typing import Any
 import yt_dlp
 
 from .errors import EngineError, classify
-from . import cookies
+from . import cookies, gdrive
 from .runtime import ffmpeg_location
 from .sources import identify, tune_for
 
 log = logging.getLogger("haul.extractor")
+gdrive.install()
 
 AUDIO_TARGETS = [
     {"id": "mp3", "label": "MP3", "lossy": True},

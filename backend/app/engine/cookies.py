@@ -78,7 +78,7 @@ def clear() -> dict:
 
 def status() -> dict:
     if not _path or not _path.exists():
-        return {"present": False, "count": 0, "sites": [], "youtube": False, "updated_at": None}
+        return {"present": False, "count": 0, "sites": [], "youtube": False, "google": False, "updated_at": None}
     try:
         domains = _parse(_path.read_text(encoding="utf-8", errors="replace"))
     except CookieError:
@@ -88,7 +88,8 @@ def status() -> dict:
         "present": bool(domains),
         "count": len(domains),
         "sites": sites[:50],
-        "youtube": any(s in ("youtube.com", "google.com") for s in sites),
+        "youtube": "youtube.com" in sites,
+        "google": "google.com" in sites,  # Google Drive and other Google sign-ins
         "updated_at": _path.stat().st_mtime,
     }
 
