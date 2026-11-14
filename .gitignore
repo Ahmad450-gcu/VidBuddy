@@ -21,3 +21,6 @@ cookies.txt
 
 # local Claude Code settings
 .claude/
+
+# desktop app build output
+backend/desktop/build/

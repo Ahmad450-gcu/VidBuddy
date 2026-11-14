@@ -121,6 +121,8 @@ export interface MediaQuery {
 
 export const api = {
   system: () => request<SystemInfo>('GET', '/system'),
+  revealMedia: (id: string) => request<void>('POST', `/media/${id}/reveal`),
+  openMediaFolder: () => request<void>('POST', '/system/open-media-folder'),
   health: () => request<{ ok: boolean }>('GET', '/health'),
   analyze: (url: string, refresh = false) => request<Analysis>('POST', '/analyze', { url, refresh }),
 

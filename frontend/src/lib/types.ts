@@ -240,6 +240,7 @@ export interface SystemInfo {
   media_root: string
   auth: boolean
   supported_site_count: number
+  desktop?: boolean
 }
 
 export interface ApiErrorBody {

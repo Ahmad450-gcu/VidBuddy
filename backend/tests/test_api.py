@@ -316,3 +316,25 @@ def test_fetch_subtitles_rejects_non_web_items(client, media_server):
     media_id = wait_for(client, j.json()["items"][0]["id"], {"completed"})["media_id"]
     r = client.post(f"/api/media/{media_id}/subtitles", json={"lang": "../x"})
     assert r.status_code == 422
+
+
+def test_desktop_only_actions(client, media_server, monkeypatch):
+    j = client.post("/api/downloads", json={"url": f"{media_server['base']}/small.mp4", "kind": "video"})
+    media_id = wait_for(client, j.json()["items"][0]["id"], {"completed"})["media_id"]
+    settings = client.app.state.services.settings
+    # a server install never opens windows on the host
+    assert client.get("/api/system").json()["desktop"] is False
+    assert client.post(f"/api/media/{media_id}/reveal").status_code == 404
+    assert client.post("/api/system/open-media-folder").status_code == 404
+
+    from app.engine import runtime
+
+    opened = []
+    monkeypatch.setattr(runtime, "reveal_in_explorer", lambda p, select=True: opened.append((p, select)))
+    monkeypatch.setattr(settings, "desktop", True)
+    assert client.get("/api/system").json()["desktop"] is True
+    assert client.post(f"/api/media/{media_id}/reveal").status_code == 204
+    assert client.post("/api/system/open-media-folder").status_code == 204
+    assert client.post("/api/media/nope/reveal").status_code == 404
+    assert opened[0][0].is_file() and opened[0][1] is True
+    assert opened[1] == (client.app.state.services.library.media_root, False)

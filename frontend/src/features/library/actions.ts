@@ -1,5 +1,5 @@
 import { api, mediaUrls } from '../../lib/api'
-import { saveToDevice } from '../../lib/platform'
+import { isDesktop, saveToDevice } from '../../lib/platform'
 import type { MediaItem } from '../../lib/types'
 import { usePlayer } from '../../stores/player'
 import { toast, toastError } from '../../stores/ui'
@@ -42,7 +42,18 @@ export async function saveAudio(item: MediaItem) {
   }
 }
 
+/** Label for the "save" action: on desktop the file is already here, so we show it instead. */
+export const saveItemLabel = () => (isDesktop() ? 'Show in folder' : 'Save to device')
+
 export async function saveItem(item: MediaItem) {
+  if (isDesktop()) {
+    try {
+      await api.revealMedia(item.id)
+    } catch (e) {
+      toastError(e, "Couldn't open the folder")
+    }
+    return
+  }
   try {
     const result = await saveToDevice(mediaUrls.file(item.id), item.filename, item.mime)
     if (result === 'saved') toast({ tone: 'success', title: 'Saved to your device', body: item.filename })

@@ -4,6 +4,7 @@ import { Trash2, Upload } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Badge, Skeleton } from '../../components/ui/Feedback'
 import { api } from '../../lib/api'
+import { isDesktop } from '../../lib/platform'
 import type { CookieStatus } from '../../lib/types'
 import { toast, toastError } from '../../stores/ui'
 
@@ -59,7 +60,7 @@ export function CookiesSection() {
         <li>Export cookies in Netscape <code className="font-mono">cookies.txt</code> format, e.g. with the “Get cookies.txt LOCALLY” browser extension.</li>
         <li>Close that private window (so the site doesn't rotate the cookies), then upload the file here.</li>
       </ol>
-      <p className="text-[12px] text-fg-3">The file stays on your VidBuddy server and is never sent back to the app. Treat it like a password. Remove it any time.</p>
+      <p className="text-[12px] text-fg-3">{isDesktop() ? 'The file stays on this computer.' : 'The file stays on your VidBuddy server and is never sent back to the app.'} Treat it like a password. Remove it any time.</p>
 
       <div className="flex flex-wrap gap-2">
         <input ref={fileRef} type="file" accept=".txt,text/plain" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />

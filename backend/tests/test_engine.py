@@ -123,3 +123,44 @@ def test_netcompat_demotes_profiles_the_network_drops(monkeypatch):
         _curlcffi.CurlCFFIRH._SUPPORTED_IMPERSONATE_TARGET_MAP = original
 
     assert errors.classify("ERROR: [dailymotion] x: No video formats found!").code == "no_formats"
+
+
+def test_updater_helpers(tmp_path):
+    import io
+    import zipfile
+
+    import pytest
+
+    from app.engine import updater
+
+    assert updater.version_tuple("2026.10.26.1") > updater.version_tuple("2026.10.26")
+    assert updater.version_tuple("2026.11.2") > updater.version_tuple("2026.10.26")
+
+    meta = {"info": {"requires_dist": ["yt-dlp-ejs==0.9.1; extra == \"default\"", "brotli; extra == \"default\""]},
+            "urls": [{"packagetype": "sdist", "filename": "yt_dlp-1.tar.gz", "url": "https://files.pythonhosted.org/a"},
+                     {"packagetype": "bdist_wheel", "filename": "yt_dlp-1-py3-none-any.whl",
+                      "url": "https://files.pythonhosted.org/b", "digests": {"sha256": "x"}}]}
+    assert updater._pinned_ejs(meta) == "0.9.1"
+    assert updater._wheel(meta)["url"].endswith("/b")
+    meta["urls"][1]["url"] = "https://evil.example/b"
+    with pytest.raises(ValueError):
+        updater._wheel(meta)
+
+    # only the two packages are unpacked; anything else in the wheel (or a path escape) is ignored
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("yt_dlp/__init__.py", "")
+        z.writestr("yt_dlp_ejs/x.js", "")
+        z.writestr("other/evil.py", "")
+        z.writestr("yt_dlp-1.dist-info/METADATA", "")
+    whl = tmp_path / "w.whl"
+    whl.write_bytes(buf.getvalue())
+    dest = tmp_path / "out"
+    updater._unpack(whl, dest)
+    assert sorted(p.name for p in dest.iterdir()) == ["yt_dlp", "yt_dlp_ejs"]
+
+    # no state yet: nothing activated, and stale folders are cleaned up
+    engine = tmp_path / "engine"
+    (engine / "2020.1.1").mkdir(parents=True)
+    assert updater.activate(engine) is None
+    assert not (engine / "2020.1.1").exists()

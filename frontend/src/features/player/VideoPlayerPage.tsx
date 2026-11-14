@@ -14,6 +14,7 @@ import type { MediaItem } from '../../lib/types'
 import { usePlayer } from '../../stores/player'
 import { toast } from '../../stores/ui'
 import { listenToItem, saveAudio, saveItem, toggleFavorite } from '../library/actions'
+import { isDesktop } from '../../lib/platform'
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 const LANG_NAMES = (() => {
@@ -427,7 +428,7 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
             </IconButton>
           )}
           items={[
-            { label: `Save video${item.ext ? ` (${item.ext.toUpperCase()})` : ''}`, icon: <Film size={15} />, onSelect: () => saveItem(item) },
+            { label: isDesktop() ? 'Show in folder' : `Save video${item.ext ? ` (${item.ext.toUpperCase()})` : ''}`, icon: <Film size={15} />, onSelect: () => saveItem(item) },
             { label: 'Save audio as MP3', icon: <Music size={15} />, onSelect: () => saveAudio(item) },
           ]}
         />

@@ -1,4 +1,45 @@
 /** Feature detection. Never assume a capability exists on every device. */
+import { connection } from './api'
+
+// ------------------------------------------------------------------ desktop app
+const DESKTOP_KEY = 'vidbuddy.desktop'
+
+/**
+ * The Windows app opens this page as /?desktop_token=… on its private localhost server.
+ * Keep the token like a saved connection, remember that we're inside the desktop app,
+ * and drop the token from the address bar. Call once before the app renders.
+ */
+export function initDesktop() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('desktop_token')
+    if (token) {
+      connection.set(token, '')
+      localStorage.setItem(DESKTOP_KEY, '1')
+      params.delete('desktop_token')
+      const qs = params.toString()
+      window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash)
+    }
+  } catch {
+    /* storage unavailable: behave like the web app */
+  }
+  if (isDesktop()) {
+    // Video fullscreen only fills the window; ask the app to make the window fullscreen too.
+    document.addEventListener('fullscreenchange', () => {
+      const bridge = (window as unknown as { pywebview?: { api?: { fullscreen?: (on: boolean) => Promise<void> } } }).pywebview?.api
+      bridge?.fullscreen?.(!!document.fullscreenElement)?.catch(() => undefined)
+    })
+  }
+}
+
+/** True inside the VidBuddy Windows app (files are already on this computer). */
+export function isDesktop(): boolean {
+  try {
+    return localStorage.getItem(DESKTOP_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>

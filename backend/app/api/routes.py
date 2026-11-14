@@ -52,7 +52,36 @@ def system(svc: Services = Depends(services)) -> dict[str, Any]:
         "media_root": str(svc.library.media_root),
         "auth": bool(svc.settings.api_token),
         "supported_site_count": len(supported_sites()),
+        "desktop": svc.settings.desktop,
     }
+
+
+# ------------------------------------------------------------ desktop only
+def _desktop_only(svc: Services) -> None:
+    # These open windows on the machine running the server, so they only make
+    # sense (and are only allowed) in the single-user desktop app.
+    if not svc.settings.desktop:
+        raise HTTPException(404, "Not found.")
+
+
+@router.post("/media/{media_id}/reveal", status_code=204)
+def reveal_media(media_id: str, svc: Services = Depends(services)) -> None:
+    _desktop_only(svc)
+    row = _media_or_404(svc, media_id)
+    path = svc.library.abs_path(row["path"])
+    if not path.exists():
+        raise HTTPException(410, "The file is no longer on disk.")
+    from ..engine.runtime import reveal_in_explorer
+
+    reveal_in_explorer(path)
+
+
+@router.post("/system/open-media-folder", status_code=204)
+def open_media_folder(svc: Services = Depends(services)) -> None:
+    _desktop_only(svc)
+    from ..engine.runtime import reveal_in_explorer
+
+    reveal_in_explorer(svc.library.media_root, select=False)
 
 
 @router.get("/sources")

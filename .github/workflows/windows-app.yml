@@ -1,0 +1,54 @@
+# Builds the VidBuddy Windows installer.
+#   - Push a tag like v1.0.0 to publish it on the GitHub Releases page.
+#   - Or run it by hand from the Actions tab to get the installer as a downloadable artifact.
+name: Windows app
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install build tools
+        shell: pwsh
+        run: |
+          python -m venv backend/.venv
+          backend/.venv/Scripts/python.exe -m pip install --upgrade pip
+          backend/.venv/Scripts/python.exe -m pip install -r backend/requirements-desktop.txt
+          choco install innosetup -y --no-progress
+
+      - name: Build app and installer
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "" }
+          ./backend/desktop/build.ps1 -Version $version
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VidBuddy-Setup
+          path: backend/desktop/build/VidBuddy-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: backend/desktop/build/VidBuddy-Setup-*.exe
+          generate_release_notes: true

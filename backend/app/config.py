@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Frontend
     frontend_dist: Path | None = None  # serve built SPA from here when set
 
+    # Desktop app (Windows build): enables "show in folder" and other local-only actions
+    desktop: bool = False
+
     def resolved_media_dir(self) -> Path:
         return (self.media_dir or self.data_dir / "media").resolve()
 

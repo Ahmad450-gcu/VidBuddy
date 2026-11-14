@@ -7,7 +7,7 @@ import { api } from '../../lib/api'
 import { formatBytes, formatDate, formatDuration } from '../../lib/format'
 import type { MediaItem } from '../../lib/types'
 import { toast } from '../../stores/ui'
-import { listenToItem, saveAudio, saveItem, shareItem, toggleFavorite } from './actions'
+import { listenToItem, saveAudio, saveItem, saveItemLabel, shareItem, toggleFavorite } from './actions'
 
 export interface DetailsActions {
   onPlay: () => void
@@ -67,7 +67,7 @@ export function MediaDetails({ item, actions }: { item: MediaItem; actions: Deta
           <IconButton label={full.favorite ? 'Remove from favorites' : 'Add to favorites'} active={full.favorite} onClick={() => toggleFavorite(full, (m) => { setFull(m); actions.onChanged(m) })}>
             <Heart size={18} className={full.favorite ? 'fill-accent' : ''} />
           </IconButton>
-          <IconButton label="Save to device" onClick={() => saveItem(full)} disabled={full.status === 'missing'}>
+          <IconButton label={saveItemLabel()} onClick={() => saveItem(full)} disabled={full.status === 'missing'}>
             <Download size={18} />
           </IconButton>
         </div>

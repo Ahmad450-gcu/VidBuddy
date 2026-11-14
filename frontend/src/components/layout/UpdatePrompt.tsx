@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { isDesktop } from '../../lib/platform'
 
 /**
  * Service worker registration with an explicit "update available" prompt, so a new
@@ -12,6 +13,11 @@ export function UpdatePrompt() {
 
   useEffect(() => {
     if (!('serviceWorker' in navigator) || import.meta.env.DEV) return
+    if (isDesktop()) {
+      // the desktop app ships its own copy of the UI; a cached one would only go stale
+      navigator.serviceWorker.getRegistrations().then((rs) => rs.forEach((r) => r.unregister())).catch(() => undefined)
+      return
+    }
     let cancelled = false
     import('virtual:pwa-register').then(({ registerSW }) => {
       if (cancelled) return

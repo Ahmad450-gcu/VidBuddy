@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronRight, Download, FolderHeart, HardDrive, Monitor, Moon, Settings as SettingsIcon, Sun } from 'lucide-react'
+import { ChevronRight, Download, FolderHeart, FolderOpen, HardDrive, Monitor, Moon, Settings as SettingsIcon, Sun } from 'lucide-react'
 import { Logo, PageHeader } from '../../components/layout/Logo'
 import { Button } from '../../components/ui/Button'
 import { Field, Input, Segmented, Select, Switch } from '../../components/ui/Controls'
 import { Badge, Skeleton } from '../../components/ui/Feedback'
 import { api, connection } from '../../lib/api'
-import { install, supports } from '../../lib/platform'
+import { install, isDesktop, supports } from '../../lib/platform'
 import type { AudioFormat, Container, MediaKind, Preferences, SystemInfo } from '../../lib/types'
 import { usePrefs } from '../../stores/prefs'
 import { CookiesSection } from './CookiesSection'
@@ -213,7 +213,7 @@ export function SettingsPage() {
           <CookiesSection />
         </Section>
 
-        <Section title="Server" description="Leave empty when this app is served by your VidBuddy server. Set it when using the app from another address.">
+        {!isDesktop() && <Section title="Server" description="Leave empty when this app is served by your VidBuddy server. Set it when using the app from another address.">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Server address" hint="e.g. https://haul.example.com">
               <Input value={server} onChange={(e) => setServer(e.target.value)} placeholder="Same as this page" inputMode="url" />
@@ -236,9 +236,9 @@ export function SettingsPage() {
           >
             Save and reconnect
           </Button>
-        </Section>
+        </Section>}
 
-        <Section title="This device">
+        {!isDesktop() && <Section title="This device">
           <div className="space-y-3 text-[13px]">
             <Row label="Installed as an app">{supports.standalone ? <Badge tone="success">Yes</Badge> : canInstall ? <Button size="sm" variant="primary" icon={<Download size={14} />} onClick={() => install.prompt()}>Install VidBuddy</Button> : <span className="text-fg-3">{supports.ios ? 'Share › Add to Home Screen in Safari' : 'Use your browser menu › Install'}</span>}</Row>
             <Row label="Save files with native dialog">{supports.fileSystemAccess ? <Badge tone="success">Supported</Badge> : <span className="text-fg-3">Browser downloads are used instead</span>}</Row>
@@ -256,7 +256,7 @@ export function SettingsPage() {
               )}
             </Row>
           </div>
-        </Section>
+        </Section>}
 
         <Section title="Keyboard shortcuts" description="In the video player on desktop.">
           <dl className="grid gap-x-8 gap-y-2 text-[13px] sm:grid-cols-2">
@@ -271,7 +271,7 @@ export function SettingsPage() {
           </dl>
         </Section>
 
-        <Section title="Engine" description="VidBuddy uses yt-dlp for extraction and FFmpeg for processing. Update the server when a site stops working.">
+        <Section title="Engine" description={isDesktop() ? 'VidBuddy uses yt-dlp for extraction and FFmpeg for processing. yt-dlp updates itself in the background; new versions apply the next time you open the app.' : 'VidBuddy uses yt-dlp for extraction and FFmpeg for processing. Update the server when a site stops working.'}>
           {!sys ? (
             <Skeleton className="h-28 w-full" />
           ) : (
@@ -281,7 +281,16 @@ export function SettingsPage() {
               <Row label="FFmpeg">{sys.engine.ffmpeg ? <Badge tone="success">Available</Badge> : <Badge tone="danger">Missing</Badge>}</Row>
               <Row label="JavaScript runtime">{sys.engine.js_runtime ?? <span className="text-danger">None (YouTube formats limited)</span>}</Row>
               <Row label="Browser impersonation">{sys.engine.curl_cffi ? `curl_cffi ${sys.engine.curl_cffi}` : 'Unavailable'}</Row>
-              <Row label="Media folder"><span className="break-all font-mono">{sys.media_root}</span></Row>
+              <Row label="Media folder">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="break-all font-mono">{sys.media_root}</span>
+                  {sys.desktop && (
+                    <Button size="sm" icon={<FolderOpen size={14} />} onClick={() => api.openMediaFolder().catch((e) => toastError(e, "Couldn't open the folder"))}>
+                      Open
+                    </Button>
+                  )}
+                </span>
+              </Row>
             </dl>
           )}
         </Section>

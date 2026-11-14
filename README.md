@@ -23,6 +23,36 @@ docker compose up -d --build
 
 Open http://localhost:8000. To install on phones you need HTTPS: set `HAUL_DOMAIN` and `HAUL_API_TOKEN` in `.env`, then run `docker compose --profile https up -d` (Caddy obtains a certificate automatically). See [docs/05-deployment.md](docs/05-deployment.md).
 
+## Windows app
+
+VidBuddy also ships as a regular Windows app, so nobody needs to run a server. It's the same
+UI and engine, running only on the user's own PC:
+
+- **Install:** download `VidBuddy-Setup-<version>.exe` from the
+  [Releases](https://github.com/Ahmad450-gcu/VidBuddy/releases) page. It installs per user,
+  without admin rights. Windows may show a SmartScreen "unknown publisher" warning because
+  the installer isn't code-signed yet; choose *More info › Run anyway*.
+- **Where things go:** downloads land in `Videos\VidBuddy`. The library database, logs and
+  settings are in `%LOCALAPPDATA%\VidBuddy`. Uninstalling keeps both.
+- **Updates:** yt-dlp keeps itself current. The app checks PyPI at startup and daily,
+  verifies the download's SHA-256, self-tests it, and switches to it on the next launch.
+- **What's inside:** an Edge WebView2 window (built into Windows 10/11) via
+  [pywebview](https://pywebview.flowrl.com/), the FastAPI backend on `127.0.0.1` behind a
+  per-install token, FFmpeg, and [Deno](https://deno.com/) for YouTube's JavaScript checks.
+
+Build it yourself (Python 3.12 and Node 20+; add [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+for the installer):
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\pip install -r requirements-desktop.txt
+powershell -ExecutionPolicy Bypass -File desktop\build.ps1
+```
+
+The `Windows app` GitHub Actions workflow builds the installer on every `v*` tag and attaches
+it to that release.
+
 ## Local development
 
 Requirements: Python 3.12+, Node 20+ (Node also serves as yt-dlp's JavaScript runtime for YouTube). FFmpeg is optional: a static build is bundled via `imageio-ffmpeg` when it isn't on `PATH`.

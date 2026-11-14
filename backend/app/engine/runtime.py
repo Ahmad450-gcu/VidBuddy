@@ -94,3 +94,21 @@ def extract_frame(video: "Path", dest: "Path", at: float | None) -> bool:
         return dest.exists() and dest.stat().st_size > 0
     except (subprocess.SubprocessError, OSError):
         return False
+
+
+def reveal_in_explorer(path: "Path", select: bool = True) -> None:
+    """Open a folder (or select a file in it) in the system file manager."""
+    import os
+    import subprocess
+    import sys
+
+    path = Path(path)
+    if sys.platform == "win32":
+        if select and path.is_file():
+            subprocess.Popen(["explorer", f"/select,{path}"])
+        else:
+            os.startfile(str(path))  # type: ignore[attr-defined]
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(path)] if select else ["open", str(path)])
+    else:
+        subprocess.Popen(["xdg-open", str(path.parent if select else path)])
