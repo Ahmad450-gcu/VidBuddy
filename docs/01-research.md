@@ -29,13 +29,13 @@ Desk research on current products: vendor pages, F-Droid/AlternativeTo/SourceFor
 
 ## Engine research notes (Nov 2026)
 
-* yt-dlp ships ~1,750 extractors. YouTube now **requires an external JS runtime** (deno/node/quickjs/bun) plus the `yt-dlp-ejs` package for full format coverage. Only Deno is enabled by default, so Haul enables Node explicitly when found.
+* yt-dlp ships ~1,750 extractors. YouTube now **requires an external JS runtime** (deno/node/quickjs/bun) plus the `yt-dlp-ejs` package for full format coverage. Only Deno is enabled by default, so VidBuddy enables Node explicitly when found.
 * Several extractors (Dailymotion, Instagram, others) need **browser impersonation** via `curl_cffi`, which is bundled.
-* FFmpeg is required for merging DASH streams and for audio conversion. Haul uses a system FFmpeg when one is on PATH and falls back to the static binary from `imageio-ffmpeg`.
+* FFmpeg is required for merging DASH streams and for audio conversion. VidBuddy uses a system FFmpeg when one is on PATH and falls back to the static binary from `imageio-ffmpeg`.
 
 ## Positioning
 
-> **Haul** is a calm, ad-free home for the media you save. Paste any link from 1,700+ sites, pick a quality in one tap, and it lands in a library you can watch, listen to and organize on every device.
+> **VidBuddy** is a calm, ad-free home for the media you save. Paste any link from 1,700+ sites, pick a quality in one tap, and it lands in a library you can watch, listen to and organize on every device.
 
 Distinctive identity: an editorial dark-first interface (warm graphite surfaces, a single amber accent, Geist typography). The download queue and the library are one continuous flow, not two apps.
 

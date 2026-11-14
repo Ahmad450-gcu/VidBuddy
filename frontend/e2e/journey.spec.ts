@@ -177,7 +177,7 @@ test('mobile layout: bottom nav, paste flow, library', async ({ page }) => {
 test('PWA: manifest, icons, service worker, offline shell, share target', async ({ page, context }) => {
   test.skip(test.info().project.name !== 'desktop')
   const manifest = await (await page.request.get('/manifest.webmanifest')).json()
-  expect(manifest.name).toContain('Haul')
+  expect(manifest.name).toContain('VidBuddy')
   expect(manifest.display).toBe('standalone')
   expect(manifest.share_target.action).toBe('/share')
   for (const icon of manifest.icons.filter((i: { src: string }) => i.src.endsWith('.png'))) {

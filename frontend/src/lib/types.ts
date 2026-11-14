@@ -247,3 +247,11 @@ export interface ApiErrorBody {
   message?: string
   detail?: string
 }
+
+export interface CookieStatus {
+  present: boolean
+  count: number
+  sites: string[]
+  youtube: boolean
+  updated_at: number | null
+}

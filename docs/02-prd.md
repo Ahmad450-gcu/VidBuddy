@@ -1,4 +1,4 @@
-# 02 · Product Requirements — Haul
+# 02 · Product Requirements — VidBuddy
 
 ## Goals
 1. Paste or share a link and get the media in under three taps.
@@ -8,11 +8,11 @@
 
 ## Non-goals (v1)
 * Bypassing DRM. Protected streams are rejected with a clear message.
-* Multi-tenant SaaS accounts. Haul is single-owner and self-hosted, with an optional access token.
+* Multi-tenant SaaS accounts. VidBuddy is single-owner and self-hosted, with an optional access token.
 * Native mobile background download services (see the limitations doc).
 
 ## Personas
-* **Commuter (mobile):** saves lectures and podcasts on Wi-Fi to play later. Shares links from the YouTube app straight into Haul.
+* **Commuter (mobile):** saves lectures and podcasts on Wi-Fi to play later. Shares links from the YouTube app straight into VidBuddy.
 * **Archivist (desktop):** grabs whole playlists in a specific codec and resolution, runs 3–5 jobs at once, schedules big jobs overnight.
 * **Listener:** extracts audio to MP3/M4A with artwork and builds playlists.
 
@@ -40,7 +40,7 @@
 
 ## Key user journeys
 1. **Paste → Download.** Home → paste field (auto-focus; a Paste button reads the clipboard) → analysis card (thumbnail, title, source, duration) → choose a Video or Audio tab with quality chips → Download → the job appears in Downloads with live progress → on completion a toast offers "Play", and the item is in the library.
-2. **Share from another app (Android/desktop Chrome).** Share → Haul → the app opens `/share?url=…` → analysis starts automatically.
+2. **Share from another app (Android/desktop Chrome).** Share → VidBuddy → the app opens `/share?url=…` → analysis starts automatically.
 3. **Playlist.** Paste a playlist URL → list of entries with checkboxes (select all/none) → one quality preset → N jobs queued.
 4. **Recover.** Network drop → job fails with "Network error" → Retry resumes from the `.part` file. A server restart re-queues interrupted jobs automatically.
 5. **Listen.** Library → Audio → play → mini-player persists across pages → queue, shuffle, repeat → lock-screen controls via Media Session.

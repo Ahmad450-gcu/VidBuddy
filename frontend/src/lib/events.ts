@@ -50,6 +50,11 @@ export function connectEvents(): () => void {
     es.addEventListener('media', (e) => {
       const data = JSON.parse((e as MessageEvent).data) as MediaEvent
       useUi.getState().bumpLibrary()
+      if (data.action === 'deleted') {
+        // finished downloads of deleted files leave the Downloads list too
+        const store = useDownloads.getState()
+        for (const j of Object.values(store.jobs)) if (j.media_id && data.ids.includes(j.media_id) && j.status === 'completed') store.remove(j.id)
+      }
       if (data.action === 'added') {
         const job = Object.values(useDownloads.getState().jobs).find((j) => j.media_id === data.media.id || j.id === data.media.job_id)
         if (job) completedListeners.forEach((l) => l(job, data.media))

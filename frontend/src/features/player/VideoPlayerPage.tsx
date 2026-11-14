@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Captions, CaptionsOff, Download, Gauge, Heart, Maximize, Minimize, Pause, PictureInPicture2, Play, RotateCcw, RotateCw, SkipBack, SkipForward, Volume1, Volume2, VolumeX,
+  ArrowLeft, Captions, CaptionsOff, Download, Film, Gauge, Headphones, Heart, Loader2, Music, Maximize, Minimize, Pause, PictureInPicture2, Play, RotateCcw, RotateCw, SkipBack, SkipForward, Volume1, Volume2, VolumeX,
 } from 'lucide-react'
 import { IconButton } from '../../components/ui/Button'
 import { ErrorState, Spinner } from '../../components/ui/Feedback'
@@ -13,9 +13,25 @@ import { supports } from '../../lib/platform'
 import type { MediaItem } from '../../lib/types'
 import { usePlayer } from '../../stores/player'
 import { toast } from '../../stores/ui'
-import { saveItem, toggleFavorite } from '../library/actions'
+import { listenToItem, saveAudio, saveItem, toggleFavorite } from '../library/actions'
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
+const LANG_NAMES = (() => {
+  try {
+    return new Intl.DisplayNames([navigator.language || 'en'], { type: 'language' })
+  } catch {
+    return null
+  }
+})()
+const langName = (code: string) => {
+  try {
+    return LANG_NAMES?.of(code.replace(/-orig$/, '')) ?? code
+  } catch {
+    return code
+  }
+}
+/** Languages offered when a video has no subtitles yet: English plus the browser's language. */
+const WANTED_LANGS = [...new Set(['en', (navigator.language || 'en').split('-')[0]])]
 
 type WebkitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void }
 
@@ -91,6 +107,7 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
   const [controls, setControls] = useState(true)
   const [subLang, setSubLang] = useState<string | null>(item.subtitles[0]?.lang ?? null)
   const [flash, setFlash] = useState<{ icon: 'back' | 'fwd'; key: number } | null>(null)
+  const [fetchingSubs, setFetchingSubs] = useState(false)
   const hideTimer = useRef<number | undefined>(undefined)
   const lastSave = useRef(0)
   const lastTap = useRef<{ t: number; x: number }>({ t: 0, x: 0 })
@@ -167,6 +184,28 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
       toast({ tone: 'danger', title: 'Picture-in-picture is not available here' })
     }
   }, [])
+  const getSubtitles = useCallback(
+    async (lang: string) => {
+      setFetchingSubs(true)
+      try {
+        const m = await api.fetchSubtitles(item.id, lang)
+        onChange(m)
+        const got = m.subtitles.find((s) => s.lang === lang || s.lang.startsWith(lang)) ?? m.subtitles[0]
+        if (got) setSubLang(got.lang)
+        toast({ tone: 'success', title: 'Subtitles added', body: got ? langName(got.lang) : undefined })
+      } catch (e) {
+        toast({ tone: 'danger', title: "Couldn't get subtitles", body: e instanceof Error ? e.message : String(e) })
+      } finally {
+        setFetchingSubs(false)
+      }
+    },
+    [item.id, onChange],
+  )
+  const listen = () => {
+    listenToItem(item, video.current?.currentTime)
+    video.current?.pause()
+    onBack()
+  }
   const changeVolume = (v: number) => {
     setVolume(v)
     setMuted(v === 0)
@@ -190,7 +229,7 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
     const v = video.current
     if (!v) return
     for (const t of Array.from(v.textTracks)) t.mode = t.language === subLang ? 'showing' : 'disabled'
-  }, [subLang])
+  }, [subLang, item.subtitles])
   useEffect(() => {
     const onFs = () => setFullscreen(!!document.fullscreenElement)
     document.addEventListener('fullscreenchange', onFs)
@@ -214,6 +253,7 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
       else if (k === 'm') setMuted((m) => !m)
       else if (k === 'f') toggleFullscreen()
       else if (k === 'p' && supports.pictureInPicture) togglePip()
+      else if (k === 'a') listen()
       else if (k === 'c' && item.subtitles.length) setSubLang((s) => (s ? null : item.subtitles[0].lang))
       else if (k === 'N' && onNext) onNext()
       else if (k === 'P' && onPrev) onPrev()
@@ -288,7 +328,7 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
         playsInline
         autoPlay
         preload="auto"
-        className="max-h-full max-w-full"
+        className="size-full object-contain"
         onLoadedMetadata={(e) => {
           const v = e.currentTarget
           setDuration(v.duration)
@@ -336,7 +376,7 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
         }}
       >
         {item.subtitles.map((s) => (
-          <track key={s.lang} kind="subtitles" srcLang={s.lang} label={s.lang} src={mediaUrls.subtitle(item.id, s.lang)} />
+          <track key={s.lang} kind="subtitles" srcLang={s.lang} label={langName(s.lang)} src={mediaUrls.subtitle(item.id, s.lang)} />
         ))}
       </video>
 
@@ -376,9 +416,21 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
         <IconButton label={item.favorite ? 'Remove from favorites' : 'Add to favorites'} tone="onMedia" active={item.favorite} onClick={() => toggleFavorite(item, onChange)}>
           <Heart size={18} className={item.favorite ? 'fill-accent' : ''} />
         </IconButton>
-        <IconButton label="Save to device" tone="onMedia" onClick={() => saveItem(item)}>
-          <Download size={18} />
+        <IconButton label="Play as audio" tone="onMedia" onClick={listen}>
+          <Headphones size={18} />
         </IconButton>
+        <Menu
+          align="end"
+          trigger={(p) => (
+            <IconButton label="Save to device" tone="onMedia" {...p}>
+              <Download size={18} />
+            </IconButton>
+          )}
+          items={[
+            { label: `Save video${item.ext ? ` (${item.ext.toUpperCase()})` : ''}`, icon: <Film size={15} />, onSelect: () => saveItem(item) },
+            { label: 'Save audio as MP3', icon: <Music size={15} />, onSelect: () => saveAudio(item) },
+          ]}
+        />
       </div>
 
       {/* Center play button on touch */}
@@ -458,20 +510,26 @@ function Player({ item, onChange, onBack, onPrev, onNext }: { item: MediaItem; o
             )}
             items={SPEEDS.map((s) => ({ label: s === 1 ? 'Normal' : `${s}×`, onSelect: () => setRate(s), icon: s === rate ? <span className="size-1.5 rounded-full bg-accent" /> : undefined }))}
           />
-          {item.subtitles.length > 0 && (
-            <Menu
-              align="end"
-              trigger={(p) => (
-                <IconButton label="Subtitles (c)" tone="onMedia" active={!!subLang} {...p}>
-                  {subLang ? <Captions size={20} /> : <CaptionsOff size={20} />}
-                </IconButton>
-              )}
-              items={[
-                { label: 'Off', onSelect: () => setSubLang(null), icon: subLang === null ? <span className="size-1.5 rounded-full bg-accent" /> : undefined },
-                ...item.subtitles.map((s) => ({ label: s.lang, onSelect: () => setSubLang(s.lang), icon: subLang === s.lang ? <span className="size-1.5 rounded-full bg-accent" /> : undefined })),
-              ]}
-            />
-          )}
+          <Menu
+            align="end"
+            trigger={(p) => (
+              <IconButton label="Subtitles (c)" tone="onMedia" active={!!subLang} {...p}>
+                {fetchingSubs ? <Loader2 size={20} className="animate-spin" /> : subLang ? <Captions size={20} /> : <CaptionsOff size={20} />}
+              </IconButton>
+            )}
+            items={[
+              { label: 'Off', onSelect: () => setSubLang(null), icon: subLang === null ? <span className="size-1.5 rounded-full bg-accent" /> : undefined },
+              ...item.subtitles.map((s) => ({ label: langName(s.lang), onSelect: () => setSubLang(s.lang), icon: subLang === s.lang ? <span className="size-1.5 rounded-full bg-accent" /> : undefined })),
+              ...(item.source_url?.startsWith('http')
+                ? WANTED_LANGS.filter((l) => !item.subtitles.some((s) => s.lang.split('-')[0] === l)).map((l) => ({
+                    label: `Get ${langName(l)} subtitles`,
+                    icon: <Download size={14} />,
+                    disabled: fetchingSubs,
+                    onSelect: () => getSubtitles(l),
+                  }))
+                : []),
+            ]}
+          />
           {supports.pictureInPicture && (
             <IconButton label="Picture in picture (p)" tone="onMedia" onClick={togglePip}>
               <PictureInPicture2 size={19} />

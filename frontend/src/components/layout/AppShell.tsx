@@ -71,7 +71,7 @@ function Sidebar({ active, queued }: { active: number; queued: number }) {
     <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-line bg-bg px-3 py-4 md:flex lg:w-64">
       <div className="mb-6 flex items-center gap-2.5 px-2.5">
         <Logo size={28} />
-        <span className="text-[17px] font-semibold tracking-tight">Haul</span>
+        <span className="text-[17px] font-semibold tracking-tight">VidBuddy</span>
       </div>
       <nav aria-label="Primary" className="flex flex-col gap-0.5">
         {NAV.map((n) => (
@@ -106,7 +106,7 @@ function Sidebar({ active, queued }: { active: number; queued: number }) {
             className="flex w-full items-center gap-2.5 rounded-md bg-surface-1 px-3 py-2.5 text-left text-[12.5px] text-fg-2 ring-1 ring-line hover:text-fg"
           >
             <ArrowDownToLine size={15} className="text-accent" />
-            Install Haul as an app
+            Install VidBuddy as an app
           </button>
         )}
       </div>
@@ -176,7 +176,7 @@ function ConnectionBanner() {
           </NavLink>
         </span>
       ) : (
-        <span>Can't reach the Haul server. Downloads continue on the server; reconnecting…</span>
+        <span>Can't reach the VidBuddy server. Downloads continue on the server; reconnecting…</span>
       )}
     </div>
   )

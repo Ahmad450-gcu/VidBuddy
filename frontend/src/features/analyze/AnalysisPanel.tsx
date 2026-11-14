@@ -1,4 +1,5 @@
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, KeyRound, RefreshCw } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '../../components/ui/Button'
 import { Skeleton } from '../../components/ui/Feedback'
 import { useAnalysis } from './analysisStore'
@@ -7,18 +8,19 @@ import { PlaylistOptions } from './PlaylistOptions'
 
 const HINTS: Record<string, string> = {
   unsupported: 'Try the direct page of the video, or a direct link to the media file.',
-  auth: 'Private, age-restricted or members-only media needs a signed-in session. Haul can only fetch public media.',
-  geo: 'The server running Haul is in a region where this media is blocked.',
+  auth: 'VidBuddy can use your sign-in by exporting cookies from a browser where you can watch it.',
+  geo: 'The server running VidBuddy is in a region where this media is blocked.',
   drm: 'Streaming services that use DRM (Netflix, Spotify and similar) cannot be downloaded.',
   network: 'Check that the server has an internet connection, then try again.',
   timeout: 'The site was slow to respond. Trying again usually works.',
   blocked: 'The site is rate limiting automated access from this server. Wait a few minutes.',
   rate_limited: 'Too many requests in a short time. Wait a moment.',
-  offline: 'The Haul server is unreachable.',
+  offline: 'The VidBuddy server is unreachable.',
 }
 
 export function AnalysisPanel() {
   const { status, data, error, analyze, reset } = useAnalysis()
+  const navigate = useNavigate()
 
   if (status === 'loading') {
     return (
@@ -50,7 +52,12 @@ export function AnalysisPanel() {
         <div className="min-w-0 flex-1">
           <p className="text-[14px] font-semibold">{error.message}</p>
           {HINTS[error.code] && <p className="mt-1 text-[13px] text-fg-2">{HINTS[error.code]}</p>}
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
+            {error.code === 'auth' && (
+              <Button size="sm" variant="primary" icon={<KeyRound size={14} />} onClick={() => navigate('/settings#cookies')}>
+                Add cookies
+              </Button>
+            )}
             <Button size="sm" icon={<RefreshCw size={14} />} onClick={() => analyze(undefined, true)}>
               Try again
             </Button>

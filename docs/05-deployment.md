@@ -48,22 +48,22 @@ The PWA can be hosted separately (e.g. Netlify, Cloudflare Pages). Add that orig
 
 | Platform | How |
 |---|---|
-| Windows / macOS / Linux: Chrome, Edge | Open the HTTPS URL → install icon in the address bar (or **Install Haul** in the sidebar or Settings). Opens in its own window with taskbar/dock icon, share target and shortcuts. |
+| Windows / macOS / Linux: Chrome, Edge | Open the HTTPS URL → install icon in the address bar (or **Install VidBuddy** in the sidebar or Settings). Opens in its own window with taskbar/dock icon, share target and shortcuts. |
 | macOS Safari 17+ | File › Add to Dock |
-| Android: Chrome, Edge, Samsung Internet | Menu › Install app / Add to Home screen. Haul then appears in the **system share sheet**: share from YouTube etc. → Haul. |
+| Android: Chrome, Edge, Samsung Internet | Menu › Install app / Add to Home screen. VidBuddy then appears in the **system share sheet**: share from YouTube etc. → VidBuddy. |
 | iOS / iPadOS: Safari | Share › Add to Home Screen. (iOS does not support Web Share Target. Use the Paste button, which reads the clipboard after a permission tap.) |
 | Firefox desktop | Use as a normal web app (Firefox does not install PWAs). |
 
 ## 4. Microsoft Store (PWABuilder)
 
-1. Deploy Haul on a public **HTTPS** domain (the Store package loads your live site).
-2. Go to <https://www.pwabuilder.com>, enter the URL and run the report. Haul ships what the report checks: manifest with `id`, name, icons (192, 512, maskable), screenshots (wide + narrow), categories, shortcuts, share target, a service worker with offline fallback, and HTTPS.
-3. **Package for stores → Windows.** In Partner Center, create an app reservation (name "Haul" or your own). Copy the **Package ID**, **Publisher ID** and **Publisher display name** into PWABuilder's Windows options. Keep the version at `1.0.0.0` for the first submission.
+1. Deploy VidBuddy on a public **HTTPS** domain (the Store package loads your live site).
+2. Go to <https://www.pwabuilder.com>, enter the URL and run the report. VidBuddy ships what the report checks: manifest with `id`, name, icons (192, 512, maskable), screenshots (wide + narrow), categories, shortcuts, share target, a service worker with offline fallback, and HTTPS.
+3. **Package for stores → Windows.** In Partner Center, create an app reservation (name "VidBuddy" or your own). Copy the **Package ID**, **Publisher ID** and **Publisher display name** into PWABuilder's Windows options. Keep the version at `1.0.0.0` for the first submission.
 4. Download the generated `.msixbundle` plus the `.classic.appxbundle`. Test locally by double-clicking the `.msix` (enable Developer Mode or use the test certificate shipped in the ZIP).
 5. In Partner Center: create a submission → upload the packages → fill in the store listing (reuse `frontend/public/screenshots/*` and `docs/01-research.md` positioning) → age rating → submit.
 6. Updates to the web app reach Store users automatically. Re-package only when the manifest or icons change.
 
-Store policy note: downloader apps must describe how they respect content owners' rights. Haul refuses DRM-protected content, and the listing should state that it's for media you have the right to save.
+Store policy note: downloader apps must describe how they respect content owners' rights. VidBuddy refuses DRM-protected content, and the listing should state that it's for media you have the right to save.
 
 ## 5. Android (Play Store, optional)
 PWABuilder's **Android** target produces a Trusted Web Activity (`.aab`). Upload `assetlinks.json` from the generated package to `https://<domain>/.well-known/assetlinks.json` (put it in `frontend/public/.well-known/`). Google Play restricts apps that download from YouTube, so prefer sideloading or the browser install for personal use.

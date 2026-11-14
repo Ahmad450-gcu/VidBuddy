@@ -57,6 +57,10 @@ class MediaPatch(BaseModel):
     rename_file: bool = False
 
 
+class SubtitleRequest(BaseModel):
+    lang: str = Field(default="en", pattern=r"^[A-Za-z0-9\-_]{1,20}$")
+
+
 class BulkDelete(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=1000)
     delete_file: bool = True
@@ -89,3 +93,7 @@ class SettingsPatch(BaseModel):
     embed_metadata: bool | None = None
     embed_thumbnail: bool | None = None
     skip_duplicates: bool | None = None
+
+
+class CookiesUpload(BaseModel):
+    content: str = Field(min_length=1, max_length=1_000_000)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Copy, Download, ExternalLink, Heart, ListPlus, Pencil, Play, Share2, Trash2, X } from 'lucide-react'
+import { Copy, Download, ExternalLink, Headphones, Heart, ListPlus, Music, Pencil, Play, Share2, Trash2, X } from 'lucide-react'
 import { Button, IconButton } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Feedback'
 import { Thumb } from '../../components/ui/Thumb'
@@ -7,7 +7,7 @@ import { api } from '../../lib/api'
 import { formatBytes, formatDate, formatDuration } from '../../lib/format'
 import type { MediaItem } from '../../lib/types'
 import { toast } from '../../stores/ui'
-import { saveItem, shareItem, toggleFavorite } from './actions'
+import { listenToItem, saveAudio, saveItem, shareItem, toggleFavorite } from './actions'
 
 export interface DetailsActions {
   onPlay: () => void
@@ -78,6 +78,16 @@ export function MediaDetails({ item, actions }: { item: MediaItem; actions: Deta
           <Button size="sm" variant="outline" icon={<Pencil size={15} />} onClick={actions.onRename}>
             Rename
           </Button>
+          {full.kind === 'video' && (
+            <>
+              <Button size="sm" variant="outline" icon={<Headphones size={15} />} onClick={() => listenToItem(full)} disabled={full.status === 'missing'}>
+                Play as audio
+              </Button>
+              <Button size="sm" variant="outline" icon={<Music size={15} />} onClick={() => saveAudio(full)} disabled={full.status === 'missing'}>
+                Save MP3
+              </Button>
+            </>
+          )}
         </div>
 
         <dl className="mt-5 divide-y divide-line text-[12.5px]">

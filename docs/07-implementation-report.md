@@ -1,6 +1,6 @@
 # 07 · Implementation Report
 
-_Completed 2026-11-14. Haul 1.0.0._
+_Completed 2026-11-14. VidBuddy 1.0.0._
 
 ## What was built
 
@@ -43,7 +43,6 @@ Screenshots from the e2e run were reviewed for visual quality. Issues found and 
 * Safari/Firefox engines in automation (Chrome only). Behavior on those browsers is covered by feature detection and documented in [06](06-limitations.md).
 
 ## Suggested next steps
-1. Cookie import (browser export file) for private or age-gated media the user has access to.
-2. Per-user accounts and libraries for shared household servers.
-3. Notifications on completion (Web Push) for long queues.
-4. A "check for yt-dlp update" button with an in-place upgrade on the server.
+1. Per-user accounts and libraries for shared household servers.
+2. Notifications on completion (Web Push) for long queues.
+3. A "check for yt-dlp update" button with an in-place upgrade on the server.

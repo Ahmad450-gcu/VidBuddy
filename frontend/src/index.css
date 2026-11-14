@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   Haul design tokens
+   VidBuddy design tokens
    Warm graphite surfaces, a single amber signal colour, Geist type.
    Surfaces step up in lightness (dark) / down (light) to express elevation
    instead of shadows and borders everywhere.
@@ -229,4 +229,13 @@
 .haul-range:hover::-webkit-slider-thumb { transform: scale(1.15); }
 .haul-range::-moz-range-thumb {
   width: 14px; height: 14px; border: 0; border-radius: 50%; background: #fff;
+}
+
+/* Subtitles: readable on any picture */
+video::cue {
+  background: rgb(0 0 0 / 0.72);
+  color: #fff;
+  font-family: inherit;
+  font-size: clamp(15px, 2.4vw, 28px);
+  line-height: 1.35;
 }

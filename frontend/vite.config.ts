@@ -16,8 +16,8 @@ export default defineConfig({
       includeAssets: ['icons/favicon.svg', 'icons/apple-touch-icon.png'],
       manifest: {
         id: '/',
-        name: 'Haul: Media Downloader & Library',
-        short_name: 'Haul',
+        name: 'VidBuddy: Media Downloader & Library',
+        short_name: 'VidBuddy',
         description: 'Save video and audio from 1,700+ sites into a library you can watch, listen to and organize.',
         start_url: '/',
         scope: '/',

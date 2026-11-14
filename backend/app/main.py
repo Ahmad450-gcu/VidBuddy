@@ -16,6 +16,7 @@ from .api import routes
 from .api.deps import Services
 from .config import Settings, get_settings
 from .db import Database
+from .engine import cookies
 from .services.events import EventBus
 from .services.jobs import JobManager
 from .services.library import Library
@@ -27,6 +28,7 @@ log = logging.getLogger("haul")
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     settings.ensure_dirs()
+    cookies.configure(settings.data_dir)
     routes.DEFAULT_PREFS["max_concurrent"] = settings.max_concurrent_downloads
 
     @asynccontextmanager
@@ -42,14 +44,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await asyncio.to_thread(library.rescan)
         jobs.cleanup_orphan_temp()
         await jobs.start()
-        log.info("Haul ready. Media folder: %s", library.media_root)
+        log.info("VidBuddy ready. Media folder: %s", library.media_root)
         try:
             yield
         finally:
             await jobs.stop()
             db.close()
 
-    app = FastAPI(title="Haul API", version="1.0.0", lifespan=lifespan,
+    app = FastAPI(title="VidBuddy API", version="1.0.0", lifespan=lifespan,
                   docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
     app.add_middleware(GZipMiddleware, minimum_size=1024)
     app.add_middleware(

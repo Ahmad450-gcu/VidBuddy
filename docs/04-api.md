@@ -65,6 +65,8 @@ A keep-alive comment is sent every 15 s. Clients should reload `/downloads` afte
 | GET | `/media/{id}/file` | Attachment download |
 | GET | `/media/{id}/thumbnail` | |
 | GET | `/media/{id}/subtitles/{lang}` | WebVTT |
+| GET | `/media/{id}/audio` | The audio as an MP3 attachment (extracted from video with FFmpeg on first request, then cached) |
+| POST | `/media/{id}/subtitles` | Fetch subtitles for a library video from its source page. Body `{ "lang": "en" }`; falls back to auto captions |
 | GET | `/media/duplicates` | Groups by identical content hash or same source |
 | POST | `/media/rescan` | Reconcile with disk: `{missing, restored, imported}` |
 
@@ -74,6 +76,11 @@ A keep-alive comment is sent every 15 s. Clients should reload `/downloads` afte
 ## Storage & settings
 `GET /storage` returns totals, `by_kind`, `by_source`, `by_ext`, `largest[]`, `recent[]`, disk usage, media root, duplicate count, reclaimable bytes, missing count and temp folder count. `POST /storage/cleanup-temp` deletes orphaned temp folders.
 `GET /settings`, `PUT /settings`: `max_concurrent (1–10), default_kind, default_quality, default_container, default_audio_format, default_audio_bitrate, filename_template, subtitles, subtitle_langs, embed_metadata, embed_thumbnail`.
+
+---
+
+## Sign-in cookies
+`GET /cookies` returns `{present, count, sites[], youtube, updated_at}`. `PUT /cookies {content}` stores a Netscape `cookies.txt` (validated, max 1 MB, saved as `<data>/cookies.txt`). `DELETE /cookies` removes it. Cookie values are never returned. Each yt-dlp call gets a private snapshot because yt-dlp rewrites its cookie file on exit.
 
 ---
 

@@ -107,7 +107,7 @@ export function StoragePage() {
               <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
                 <Legend color="bg-accent" label="Videos" value={formatBytes(video.size)} sub={plural(video.count, 'file')} />
                 <Legend color="bg-info" label="Audio" value={formatBytes(audio.size)} sub={plural(audio.count, 'file')} />
-                {disk && <Legend color="bg-fg-3/40" label="Other data" value={formatBytes(Math.max(0, disk.used - total))} sub="Not managed by Haul" />}
+                {disk && <Legend color="bg-fg-3/40" label="Other data" value={formatBytes(Math.max(0, disk.used - total))} sub="Not managed by VidBuddy" />}
                 {disk && <Legend color="bg-surface-3" label="Free" value={formatBytes(disk.free)} sub={`${Math.round((disk.free / disk.total) * 100)}%`} />}
               </div>
               <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-line pt-4 text-[12px] text-fg-3">

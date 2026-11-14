@@ -15,14 +15,19 @@ export interface MenuItem {
 export function Menu({ trigger, items, align = 'end' }: { trigger: (props: { onClick: (e: React.MouseEvent) => void; 'aria-expanded': boolean; 'aria-haspopup': 'menu'; 'aria-controls': string }) => ReactNode; items: MenuItem[]; align?: 'start' | 'end' }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ top: number; left: number; up: boolean } | null>(null)
+  // The trigger button itself (captured on click). The wrapper is display:contents and has no box,
+  // so it can't be measured; it's only a fallback for focus/containment checks.
   const anchor = useRef<HTMLElement | null>(null)
+  const wrapper = useRef<HTMLSpanElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const id = useId()
   const visible = items.filter((i) => !i.hidden)
 
   useLayoutEffect(() => {
     if (!open || !anchor.current) return
-    const r = anchor.current.getBoundingClientRect()
+    const target = anchor.current.getClientRects().length ? anchor.current : (wrapper.current?.firstElementChild as HTMLElement | null)
+    if (!target) return
+    const r = target.getBoundingClientRect()
     const height = visible.length * 40 + 12
     const up = r.bottom + height > window.innerHeight - 8 && r.top > height
     const width = 208
@@ -68,16 +73,11 @@ export function Menu({ trigger, items, align = 'end' }: { trigger: (props: { onC
 
   return (
     <>
-      <span
-        ref={(el) => {
-          anchor.current = el
-        }}
-        className="contents"
-      >
+      <span ref={wrapper} className="contents">
         {trigger({
           onClick: (e) => {
             e.stopPropagation()
-            anchor.current = (e.currentTarget as HTMLElement) ?? anchor.current
+            anchor.current = (e.currentTarget as HTMLElement | null) ?? (wrapper.current?.firstElementChild as HTMLElement | null)
             setOpen((o) => !o)
           },
           'aria-expanded': open,
@@ -117,7 +117,8 @@ export function Menu({ trigger, items, align = 'end' }: { trigger: (props: { onC
               </button>
             ))}
           </div>,
-          document.body,
+          // inside full screen only the full-screen element is visible, so the menu must live there
+          document.fullscreenElement ?? document.body,
         )}
     </>
   )

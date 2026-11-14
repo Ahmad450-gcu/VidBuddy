@@ -74,7 +74,7 @@ export function AudioEngine() {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: track.title,
         artist: track.uploader ?? track.source ?? '',
-        album: 'Haul',
+        album: 'VidBuddy',
         artwork: track.has_thumbnail ? [{ src: mediaUrls.thumb(track.id), sizes: '512x512' }] : [],
       })
     }
@@ -124,6 +124,37 @@ export function AudioEngine() {
         /* action unsupported on this platform */
       }
     }
+  }, [])
+
+  // Keyboard shortcuts for the audio player (the video page has its own set).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return
+      if (window.location.pathname.startsWith('/watch')) return
+      const s = usePlayer.getState()
+      if (!el || s.index < 0 || !s.queue.length) return
+      const t = e.target as HTMLElement | null
+      const tag = t?.tagName
+      if (tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return
+      if (tag === 'INPUT' && (t as HTMLInputElement).type !== 'range') return
+      // let focused buttons/links keep Space and Enter, and open dialogs/menus keep their keys
+      if ((tag === 'BUTTON' || tag === 'A') && (e.key === ' ' || e.key === 'Enter')) return
+      if (document.querySelector('[role="dialog"]:not([aria-label="Now playing"]), [role="menu"], dialog[open]')) return
+      const k = e.key
+      if (k === ' ' || k === 'k') s.setPlaying(!s.playing)
+      else if (k === 'ArrowLeft' || k === 'j') seekAudio(el.currentTime - (k === 'j' ? 10 : 5))
+      else if (k === 'ArrowRight' || k === 'l') seekAudio(el.currentTime + (k === 'l' ? 10 : 5))
+      else if (k === 'ArrowUp' && tag !== 'INPUT') s.setVolume(Math.min(1, Math.round((s.volume + 0.05) * 100) / 100))
+      else if (k === 'ArrowDown' && tag !== 'INPUT') s.setVolume(Math.max(0, Math.round((s.volume - 0.05) * 100) / 100))
+      else if (k === 'm') s.setVolume(s.volume > 0 ? 0 : 1)
+      else if (k === 'N') s.next()
+      else if (k === 'P') (el.currentTime > 3 ? seekAudio(0) : s.prev())
+      else if (/^[0-9]$/.test(k) && el.duration) seekAudio((Number(k) / 10) * el.duration)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   const savePosition = (force = false) => {

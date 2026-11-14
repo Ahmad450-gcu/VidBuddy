@@ -9,6 +9,7 @@ import { api, connection } from '../../lib/api'
 import { install, supports } from '../../lib/platform'
 import type { AudioFormat, Container, MediaKind, Preferences, SystemInfo } from '../../lib/types'
 import { usePrefs } from '../../stores/prefs'
+import { CookiesSection } from './CookiesSection'
 import { toast, toastError, useUi, type Theme } from '../../stores/ui'
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
@@ -79,7 +80,7 @@ export function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader title="Settings" subtitle="Preferences are stored on your Haul server and shared by all your devices." />
+      <PageHeader title="Settings" subtitle="Preferences are stored on your VidBuddy server and shared by all your devices." />
       <div className="px-4 pb-12 md:px-8">
         <Section title="Appearance" description="Theme is remembered on this device.">
           <Segmented<Theme>
@@ -208,7 +209,11 @@ export function SettingsPage() {
           </div>
         </Section>
 
-        <Section title="Server" description="Leave empty when this app is served by your Haul server. Set it when using the app from another address.">
+        <Section title="Sign-in cookies" description="Needed for age-restricted, private or members-only media that your account can watch.">
+          <CookiesSection />
+        </Section>
+
+        <Section title="Server" description="Leave empty when this app is served by your VidBuddy server. Set it when using the app from another address.">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Server address" hint="e.g. https://haul.example.com">
               <Input value={server} onChange={(e) => setServer(e.target.value)} placeholder="Same as this page" inputMode="url" />
@@ -235,7 +240,7 @@ export function SettingsPage() {
 
         <Section title="This device">
           <div className="space-y-3 text-[13px]">
-            <Row label="Installed as an app">{supports.standalone ? <Badge tone="success">Yes</Badge> : canInstall ? <Button size="sm" variant="primary" icon={<Download size={14} />} onClick={() => install.prompt()}>Install Haul</Button> : <span className="text-fg-3">{supports.ios ? 'Share › Add to Home Screen in Safari' : 'Use your browser menu › Install'}</span>}</Row>
+            <Row label="Installed as an app">{supports.standalone ? <Badge tone="success">Yes</Badge> : canInstall ? <Button size="sm" variant="primary" icon={<Download size={14} />} onClick={() => install.prompt()}>Install VidBuddy</Button> : <span className="text-fg-3">{supports.ios ? 'Share › Add to Home Screen in Safari' : 'Use your browser menu › Install'}</span>}</Row>
             <Row label="Save files with native dialog">{supports.fileSystemAccess ? <Badge tone="success">Supported</Badge> : <span className="text-fg-3">Browser downloads are used instead</span>}</Row>
             <Row label="Picture-in-picture">{supports.pictureInPicture ? <Badge tone="success">Supported</Badge> : <span className="text-fg-3">Not supported</span>}</Row>
             <Row label="Lock-screen controls">{supports.mediaSession ? <Badge tone="success">Supported</Badge> : <span className="text-fg-3">Not supported</span>}</Row>
@@ -266,7 +271,7 @@ export function SettingsPage() {
           </dl>
         </Section>
 
-        <Section title="Engine" description="Haul uses yt-dlp for extraction and FFmpeg for processing. Update the server when a site stops working.">
+        <Section title="Engine" description="VidBuddy uses yt-dlp for extraction and FFmpeg for processing. Update the server when a site stops working.">
           {!sys ? (
             <Skeleton className="h-28 w-full" />
           ) : (
@@ -283,7 +288,7 @@ export function SettingsPage() {
 
         <div className="flex items-center gap-3 border-t border-line pt-6 text-[12px] text-fg-3">
           <Logo size={20} />
-          Haul 1.0. No ads, no tracking. Only download content you have the right to.
+          VidBuddy 1.0. No ads, no tracking. Only download content you have the right to.
         </div>
       </div>
     </div>

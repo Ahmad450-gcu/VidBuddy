@@ -328,7 +328,7 @@ export function ScheduleDialog({ open, onClose, onSchedule }: { open: boolean; o
       open={open}
       onClose={onClose}
       title="Schedule download"
-      description="Haul will start it automatically at this time. The server must be running."
+      description="VidBuddy will start it automatically at this time. The server must be running."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>

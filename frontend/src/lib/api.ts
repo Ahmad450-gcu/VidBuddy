@@ -1,10 +1,10 @@
-import type {
+import type { CookieStatus,
   Analysis, DownloadOptions, Job, MediaItem, MediaKind, Playlist, Preferences, StorageInfo, SystemInfo,
 } from './types'
 
 /**
  * Typed API client. The base URL defaults to same-origin (the backend serves the SPA in
- * production, and Vite proxies /api in development). It can be pointed at a remote Haul
+ * production, and Vite proxies /api in development). It can be pointed at a remote VidBuddy
  * server from Settings, which is useful when the PWA is installed from a static host.
  */
 const TOKEN_KEY = 'haul.token'
@@ -69,7 +69,7 @@ async function request<T>(method: string, path: string, body?: unknown, params?:
   try {
     res = await fetch(u, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
   } catch {
-    throw new ApiError(0, "Can't reach the Haul server. Check your connection.", 'offline')
+    throw new ApiError(0, "Can't reach the VidBuddy server. Check your connection.", 'offline')
   }
   if (res.status === 204) return undefined as T
   const text = await res.text()
@@ -145,6 +145,7 @@ export const api = {
   patchMedia: (id: string, body: { title?: string; favorite?: boolean; play_position?: number; rename_file?: boolean }) =>
     request<MediaItem>('PATCH', `/media/${id}`, body),
   played: (id: string) => request<void>('POST', `/media/${id}/played`),
+  fetchSubtitles: (id: string, lang = 'en') => request<MediaItem>('POST', `/media/${id}/subtitles`, { lang }),
   deleteMedia: (id: string, deleteFile = true) => request<void>('DELETE', `/media/${id}`, undefined, { delete_file: deleteFile }),
   bulkDelete: (ids: string[], deleteFile = true) =>
     request<{ affected: number }>('POST', '/media/bulk-delete', { ids, delete_file: deleteFile }),
@@ -164,11 +165,16 @@ export const api = {
 
   settings: () => request<Preferences>('GET', '/settings'),
   saveSettings: (body: Partial<Preferences>) => request<Preferences>('PUT', '/settings', body),
+
+  cookies: () => request<CookieStatus>('GET', '/cookies'),
+  saveCookies: (content: string) => request<CookieStatus>('PUT', '/cookies', { content }),
+  clearCookies: () => request<CookieStatus>('DELETE', '/cookies'),
 }
 
 export const mediaUrls = {
   stream: (id: string) => apiUrl(`/media/${id}/stream`),
   file: (id: string) => apiUrl(`/media/${id}/file`),
+  audio: (id: string) => apiUrl(`/media/${id}/audio`),
   thumb: (id: string) => apiUrl(`/media/${id}/thumbnail`),
   subtitle: (id: string, lang: string) => apiUrl(`/media/${id}/subtitles/${encodeURIComponent(lang)}`),
 }

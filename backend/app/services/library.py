@@ -238,9 +238,24 @@ class Library:
                     pass
         if row.get("thumbnail_path"):
             (self.thumbs_root / row["thumbnail_path"]).unlink(missing_ok=True)
+        # extracted-audio cache lives at <data_dir>/audio-cache (thumbs_root is <data_dir>/thumbs)
+        (self.thumbs_root.parent / "audio-cache" / f"{media_id}.mp3").unlink(missing_ok=True)
         self.db.execute("DELETE FROM media WHERE id = ?", (media_id,))
+        # A finished download whose file is gone is just clutter in the Downloads list.
+        self.db.execute("DELETE FROM jobs WHERE media_id = ? AND status = 'completed'", (media_id,))
         self.db.execute("UPDATE jobs SET media_id = NULL WHERE media_id = ?", (media_id,))
         return True
+
+    def set_subtitles(self, media_id: str, files: list[Path]) -> dict[str, Any]:
+        row = self.get(media_id)
+        if not row:
+            raise KeyError(media_id)
+        subs = {s["lang"]: s for s in json.loads(row["subtitles"] or "[]")}
+        for f in files:
+            lang = f.suffixes[-2].lstrip(".") if len(f.suffixes) >= 2 else "und"
+            subs[lang] = {"lang": lang, "path": self.rel_path(f)}
+        self.db.update("media", media_id, {"subtitles": json.dumps(list(subs.values()))})
+        return self.serialize(self.get(media_id))  # type: ignore[return-value]
 
     def thumbnail_file(self, row: dict[str, Any]) -> Path | None:
         if not row.get("thumbnail_path"):

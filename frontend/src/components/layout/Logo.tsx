@@ -1,10 +1,9 @@
 export function Logo({ size = 28 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
-      <rect width="64" height="64" rx="16" fill="var(--surface-2)" />
-      <path d="M32 14v24" stroke="var(--accent)" strokeWidth="6" strokeLinecap="round" />
-      <path d="M21 29l11 11 11-11" fill="none" stroke="var(--accent)" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M18 49h28" stroke="var(--text)" strokeWidth="6" strokeLinecap="round" />
+      <rect width="64" height="64" rx="18" fill="var(--accent)" />
+      <path d="M25 15.5 44.5 27.5 25 39.5Z" fill="var(--accent-fg)" stroke="var(--accent-fg)" strokeWidth="4" strokeLinejoin="round" />
+      <path d="M19 49h26" stroke="var(--accent-fg)" strokeWidth="5.5" strokeLinecap="round" />
     </svg>
   )
 }

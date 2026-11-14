@@ -7,6 +7,7 @@ from typing import Any
 import yt_dlp
 
 from .errors import EngineError, classify
+from . import cookies
 from .runtime import ffmpeg_location
 from .sources import identify, tune_for
 
@@ -57,6 +58,9 @@ def base_options(timeout: int = 30) -> dict[str, Any]:
     ff = ffmpeg_location()
     if ff:
         opts["ffmpeg_location"] = ff
+    cookie_file = cookies.snapshot()
+    if cookie_file:
+        opts["cookiefile"] = cookie_file
     return opts
 
 

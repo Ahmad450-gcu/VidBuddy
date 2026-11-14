@@ -53,8 +53,8 @@ export function Switch({ checked, onChange, label, description, disabled }: { ch
       >
         <span
           className={cn(
-            'absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200',
-            checked ? 'translate-x-[18px]' : 'translate-x-0.5',
+            'absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200',
+            checked ? 'translate-x-4' : 'translate-x-0',
           )}
         />
       </button>

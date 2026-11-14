@@ -293,3 +293,26 @@ def test_live_youtube_analyze_and_audio(client):
     job = client.post("/api/downloads", json={"url": url, "kind": "audio", "options": {"audio_format": "m4a"}}).json()
     done = wait_for(client, job["items"][0]["id"], {"completed", "failed"}, timeout=180)
     assert done["status"] == "completed", done
+
+
+def test_deleting_media_clears_its_download_and_audio_extracts(client, media_server):
+    j = client.post("/api/downloads", json={"url": f"{media_server['base']}/small.mp4", "kind": "video"})
+    job_id = j.json()["items"][0]["id"]
+    done = wait_for(client, job_id, {"completed"})
+    media_id = done["media_id"]
+
+    audio = client.get(f"/api/media/{media_id}/audio")
+    assert audio.status_code == 200 and audio.headers["content-type"] == "audio/mpeg"
+    assert audio.content[:3] == b"ID3" or audio.content[:2] == b"\xff\xfb"
+    assert ".mp3" in audio.headers["content-disposition"]
+
+    assert client.delete(f"/api/media/{media_id}").status_code == 204
+    assert client.get(f"/api/downloads/{job_id}").status_code == 404
+    assert all(i["id"] != job_id for i in client.get("/api/downloads").json()["items"])
+
+
+def test_fetch_subtitles_rejects_non_web_items(client, media_server):
+    j = client.post("/api/downloads", json={"url": f"{media_server['base']}/small.mp4", "kind": "video"})
+    media_id = wait_for(client, j.json()["items"][0]["id"], {"completed"})["media_id"]
+    r = client.post(f"/api/media/{media_id}/subtitles", json={"lang": "../x"})
+    assert r.status_code == 422

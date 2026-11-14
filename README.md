@@ -1,8 +1,8 @@
-# Haul: media downloader & library
+# VidBuddy: media downloader & library
 
-Haul is a self-hosted, installable web app (PWA) for saving video and audio from 1,700+ sites (via [yt-dlp](https://github.com/yt-dlp/yt-dlp)) into a personal library you can watch, listen to and organize from any phone, tablet or computer.
+VidBuddy is a self-hosted, installable web app (PWA) for saving video and audio from 1,700+ sites (via [yt-dlp](https://github.com/yt-dlp/yt-dlp)) into a personal library you can watch, listen to and organize from any phone, tablet or computer.
 
-* **Paste → pick → done.** Paste or share a link. Haul identifies the source, reads the metadata and offers simple quality chips (Best · 1080p · 720p … · MP3/M4A/Opus/FLAC), with an "All formats" table for power users.
+* **Paste → pick → done.** Paste or share a link. VidBuddy identifies the source, reads the metadata and offers simple quality chips (Best · 1080p · 720p … · MP3/M4A/Opus/FLAC), with an "All formats" table for power users.
 * **A real download manager.** Concurrent downloads, priority queue, pause/resume (continues partial files), cancel, retry, auto-retry on network errors, scheduling, live speed/ETA, and crash recovery.
 * **Library + players in one product.** Search, sort, filter, grid/list, favorites, playlists, rename, multi-select, duplicates, storage breakdown. Custom video player (speed, PiP, subtitles, keyboard + touch gestures, resume position) and audio player (queue, shuffle, repeat, lock-screen controls).
 * **No ads, no tracking.** Your server, your files.
@@ -73,4 +73,4 @@ cd frontend && npx playwright install chromium && npm run test:e2e
 
 ## Responsible use
 
-Haul downloads only publicly accessible media and refuses DRM-protected streams. Respect copyright and each site's terms. Download content you own or have permission to keep.
+VidBuddy downloads only publicly accessible media and refuses DRM-protected streams. Respect copyright and each site's terms. Download content you own or have permission to keep.

@@ -15,3 +15,6 @@ scratch/
 scratch-*/
 .env
 *.log
+
+# sign-in cookies are secrets
+cookies.txt

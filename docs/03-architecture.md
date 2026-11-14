@@ -8,7 +8,7 @@
 │   REST (fetch)  ─────────────┐        ┌──── SSE /api/events (live)    │
 └──────────────────────────────┼────────┼─────────────────────────────────┘
                                ▼        │
-┌─────────────────────── Haul server (FastAPI, single process) ──────────┐
+┌─────────────────────── VidBuddy server (FastAPI, single process) ──────────┐
 │ api/routes ── auth (Bearer/token) ── rate limiter ── security headers  │
 │     │                                                                  │
 │ services/jobs.JobManager ── scheduler loop (asyncio) ── EventBus ──────┘

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  CheckSquare, Download, Film, Heart, Info, LayoutGrid, Library as LibraryIcon, List, ListPlus, Loader2, Music2, Pencil, Play, Search, Trash2, X,
+  CheckSquare, Download, Film, Headphones, Heart, Info, LayoutGrid, Library as LibraryIcon, List, ListPlus, Loader2, Music, Music2, Pencil, Play, Search, Trash2, X,
 } from 'lucide-react'
 import { PageHeader } from '../../components/layout/Logo'
 import { Button, IconButton } from '../../components/ui/Button'
@@ -17,7 +17,7 @@ import type { MediaItem } from '../../lib/types'
 import { groupJobs, useDownloads } from '../../stores/downloads'
 import { usePlayer } from '../../stores/player'
 import { toastError } from '../../stores/ui'
-import { playItem, saveItem, toggleFavorite } from './actions'
+import { listenToItem, playItem, saveAudio, saveItem, toggleFavorite } from './actions'
 import { AddToPlaylistDialog, DeleteDialog, RenameDialog } from './dialogs'
 import { MediaDetails } from './MediaDetails'
 import { MediaCard, MediaRow } from './MediaTile'
@@ -142,11 +142,13 @@ export function LibraryPage() {
 
   const menuFor = (item: MediaItem): MenuItem[] => [
     { label: item.kind === 'video' ? 'Watch' : 'Play', icon: <Play size={15} />, onSelect: () => playItem(item, shown, navigate), disabled: item.status === 'missing' },
+    { label: 'Play as audio', icon: <Headphones size={15} />, hidden: item.kind !== 'video', onSelect: () => listenToItem(item), disabled: item.status === 'missing' },
     { label: 'Play next', icon: <ListPlus size={15} />, hidden: item.kind !== 'audio', onSelect: () => usePlayer.getState().enqueue([item]) },
     { label: 'Details', icon: <Info size={15} />, onSelect: () => setParam({ item: item.id }) },
     { label: item.favorite ? 'Remove favorite' : 'Add to favorites', icon: <Heart size={15} />, onSelect: () => toggleFavorite(item, (m) => patchLocal(m.id, m)) },
     { label: 'Add to playlist', icon: <ListPlus size={15} />, onSelect: () => setAdding([item]) },
     { label: 'Save to device', icon: <Download size={15} />, onSelect: () => saveItem(item), disabled: item.status === 'missing' },
+    { label: 'Save audio as MP3', icon: <Music size={15} />, hidden: item.kind !== 'video', onSelect: () => saveAudio(item), disabled: item.status === 'missing' },
     { label: 'Rename', icon: <Pencil size={15} />, onSelect: () => setRenaming(item) },
     { label: 'Select', icon: <CheckSquare size={15} />, onSelect: () => toggleSelect(item.id) },
     { label: 'Delete', icon: <Trash2 size={15} />, danger: true, onSelect: () => setDeleting([item]) },

@@ -239,7 +239,7 @@ def run_download(
             subs: list[Path] = []
             if options.subtitles and options.kind == "video":
                 on_progress(Progress(stage="subtitles", fraction=0.999))
-                subs = _fetch_subtitles(url, options, filepath, should_stop)
+                subs = fetch_subtitles(url, options, filepath, should_stop)
             return DownloadResult(filepath, ydl.sanitize_info(info), subs, thumb_bytes, thumb_ext)
     except JobInterrupted:
         raise
@@ -284,7 +284,8 @@ def _fetch_thumbnail(ydl: yt_dlp.YoutubeDL, info: dict[str, Any]) -> tuple[bytes
         return None, None
 
 
-def _fetch_subtitles(url: str, o: DownloadOptions, media: Path, should_stop: Callable[[], str | None]) -> list[Path]:
+def fetch_subtitles(url: str, o: DownloadOptions, media: Path, should_stop: Callable[[], str | None],
+                    errors: list[str] | None = None) -> list[Path]:
     """Best-effort sidecar subtitles (WebVTT) next to the media file.
 
     Runs as a separate pass so a flaky subtitle host can never fail or stall the media itself.
@@ -293,22 +294,23 @@ def _fetch_subtitles(url: str, o: DownloadOptions, media: Path, should_stop: Cal
         return []
     langs = [l for l in o.subtitle_langs if re.fullmatch(r"[A-Za-z0-9\-_.*]{1,20}", l)] or ["en"]
     pattern = glob_escape(media.stem) + ".*.vtt"
-    # Manual subtitles first, then automatic captions. Each pass uses a short timeout:
-    # some subtitle hosts are slow or unreachable, and we never want that to stall a job.
-    passes = [{"writesubtitles": True, "writeautomaticsub": False}]
-    if o.auto_subtitles:
-        passes.append({"writesubtitles": False, "writeautomaticsub": True})
+    # Manual first, then automatic captions as a fallback: if someone asked for subtitles they
+    # would rather get auto captions than nothing. (When the picked track is automatic only,
+    # skip the manual pass entirely.)
+    manual = {"writesubtitles": True, "writeautomaticsub": False}
+    auto = {"writesubtitles": False, "writeautomaticsub": True}
+    passes = [auto] if o.auto_subtitles else [manual, auto]
     for p in passes:
         if should_stop():
             break
-        opts = base_options(10)
+        opts = base_options(30)
         opts.update(p)
         opts.update({
             "logger": _QuietLogger(),
             "skip_download": True,
             "subtitleslangs": langs,
-            "retries": 1,
-            "fragment_retries": 1,
+            "retries": 3,
+            "fragment_retries": 3,
             "outtmpl": {"default": str(media.with_suffix("")) + ".%(ext)s"},
             "postprocessors": [{"key": "FFmpegSubtitlesConvertor", "format": "vtt", "when": "before_dl"}],
         })
@@ -318,6 +320,8 @@ def _fetch_subtitles(url: str, o: DownloadOptions, media: Path, should_stop: Cal
                 ydl.extract_info(url, download=True)
         except Exception as e:
             log.info("Subtitle pass failed for %s: %s", url, str(e)[:200])
+            if errors is not None:
+                errors.append(str(e))
         if any(media.parent.glob(pattern)):
             break
     return sorted(media.parent.glob(pattern))

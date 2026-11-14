@@ -40,13 +40,13 @@ export function UpdatePrompt() {
       {update ? (
         <>
           <RefreshCw size={15} className="text-accent" />
-          A new version of Haul is ready.
+          A new version of VidBuddy is ready.
           <Button size="sm" variant="primary" onClick={() => update(true)}>
             Reload
           </Button>
         </>
       ) : (
-        <span className="pr-2">Haul is ready to work offline.</span>
+        <span className="pr-2">VidBuddy is ready to work offline.</span>
       )}
     </div>
   )

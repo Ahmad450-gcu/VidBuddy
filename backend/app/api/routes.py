@@ -9,8 +9,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
-from ..engine import extractor
-from ..engine.errors import EngineError
+from ..engine import cookies, extractor
+from ..engine.errors import EngineError, classify
 from ..engine.runtime import engine_versions
 from ..engine.security import UnsafeInputError, validate_template, validate_url
 from ..engine.sources import identify, supported_sites
@@ -327,6 +327,67 @@ def subtitles(media_id: str, lang: str, svc: Services = Depends(services)):
     raise HTTPException(404, "Subtitle not found.")
 
 
+@router.post("/media/{media_id}/subtitles")
+def fetch_subtitles(media_id: str, body: S.SubtitleRequest, svc: Services = Depends(services)):
+    """Fetch subtitles for a video that's already in the library (from its source page)."""
+    from ..engine.downloader import DownloadOptions, fetch_subtitles as fetch
+
+    row = _media_or_404(svc, media_id)
+    if row["kind"] != "video" or not row.get("source_url") or not row["source_url"].startswith("http"):
+        raise HTTPException(422, "Subtitles can only be fetched for videos downloaded from a website.")
+    path = svc.library.abs_path(row["path"])
+    if not path.exists():
+        raise HTTPException(410, "The file is no longer on disk.")
+    opts = DownloadOptions(kind="video", subtitles=True, subtitle_langs=[body.lang])
+    errors: list[str] = []
+    files = fetch(row["source_url"], opts, path, lambda: None, errors)
+    if not files:
+        if errors:
+            e = classify(errors[-1])
+            if e.code not in ("unknown",):
+                raise HTTPException(422, e.message)
+        raise HTTPException(404, f"No '{body.lang}' subtitles are available for this video.")
+    item = svc.library.set_subtitles(media_id, files)
+    svc.bus.publish("media", {"action": "updated", "media": item})
+    return item
+
+
+@router.get("/media/{media_id}/audio")
+def media_audio(media_id: str, svc: Services = Depends(services)):
+    """The item's audio as an MP3 file. Video soundtracks are extracted once with FFmpeg and cached."""
+    import subprocess
+    from pathlib import Path
+
+    from ..engine.runtime import ffmpeg_location
+    from ..engine.security import sanitize_filename
+
+    row = _media_or_404(svc, media_id)
+    src = svc.library.abs_path(row["path"])
+    if not src.exists():
+        raise HTTPException(410, "The file is no longer on disk.")
+    name = sanitize_filename(f"{Path(row['path']).stem}.mp3")
+    if row["kind"] == "audio" and row["ext"] == "mp3":
+        return FileResponse(src, media_type="audio/mpeg", filename=name)
+    cache = svc.settings.data_dir.resolve() / "audio-cache"
+    cache.mkdir(parents=True, exist_ok=True)
+    out = cache / f"{media_id}.mp3"
+    if not out.exists() or out.stat().st_mtime < src.stat().st_mtime:
+        ff = ffmpeg_location()
+        if not ff:
+            raise HTTPException(503, "FFmpeg is needed to extract audio and isn't installed.")
+        tmp = out.with_suffix(".part.mp3")
+        cmd = [ff, "-nostdin", "-loglevel", "error", "-y", "-i", str(src), "-vn", "-map", "0:a:0",
+               "-c:a", "libmp3lame", "-b:a", "192k", "-id3v2_version", "3",
+               "-metadata", f"title={row['title']}", "-metadata", f"artist={row.get('uploader') or ''}", str(tmp)]
+        try:
+            subprocess.run(cmd, check=True, timeout=900, capture_output=True)
+            tmp.replace(out)
+        except (subprocess.SubprocessError, OSError) as e:
+            tmp.unlink(missing_ok=True)
+            raise HTTPException(500, "Couldn't extract the audio from this file.") from e
+    return FileResponse(out, media_type="audio/mpeg", filename=name)
+
+
 # ------------------------------------------------------------------ playlists
 @router.get("/playlists")
 def playlists(svc: Services = Depends(services)):
@@ -420,6 +481,28 @@ def put_settings(body: S.SettingsPatch, svc: Services = Depends(services)):
     out = {k: svc.db.get_setting(k, v) for k, v in DEFAULT_PREFS.items()}
     svc.bus.publish("settings", out)
     return out
+
+
+# ------------------------------------------------------------------- cookies
+@router.get("/cookies")
+def cookie_status():
+    return cookies.status()
+
+
+@router.put("/cookies")
+def cookie_save(body: S.CookiesUpload, svc: Services = Depends(services)):
+    try:
+        out = cookies.save(body.content)
+    except cookies.CookieError as e:
+        raise _bad(e, 422)
+    svc.db.execute("DELETE FROM info_cache")  # cached failures/limited results may change now
+    return out
+
+
+@router.delete("/cookies")
+def cookie_clear(svc: Services = Depends(services)):
+    svc.db.execute("DELETE FROM info_cache")
+    return cookies.clear()
 
 
 @router.get("/identify")
