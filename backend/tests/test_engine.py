@@ -99,3 +99,27 @@ def test_unknown_codecs_assume_muxed_media():
     assert a["has_audio"] and not a["has_video"]
     v = normalize_format({"format_id": "1", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "height": 720}, 10)
     assert v["has_video"] and not v["has_audio"]
+
+
+def test_netcompat_demotes_profiles_the_network_drops(monkeypatch):
+    """Newest Chrome profiles time out (middlebox drops big ClientHello) -> an older Chrome wins."""
+    pytest.importorskip("curl_cffi")
+    from yt_dlp.networking import _curlcffi
+    from yt_dlp.networking.impersonate import ImpersonateTarget
+
+    from app.engine import errors, netcompat
+
+    original = dict(_curlcffi.CurlCFFIRH._SUPPORTED_IMPERSONATE_TARGET_MAP)
+    chromes = [n for t, n in original.items() if t.client == "chrome" and t.os not in ("ios", "android")]
+    broken = set(chromes[:3])  # pretend the three newest Chrome profiles can't connect
+    monkeypatch.setattr(netcompat, "_probe", lambda _req, name: name not in broken)
+    try:
+        result = netcompat.tune_impersonation()
+        assert set(result["blocked"]) == {str(b) for b in broken}
+        handler = _curlcffi.CurlCFFIRH(logger=None, verbose=False)
+        resolved = handler._resolve_target(ImpersonateTarget("chrome"))
+        assert original[resolved] == chromes[3]
+    finally:
+        _curlcffi.CurlCFFIRH._SUPPORTED_IMPERSONATE_TARGET_MAP = original
+
+    assert errors.classify("ERROR: [dailymotion] x: No video formats found!").code == "no_formats"

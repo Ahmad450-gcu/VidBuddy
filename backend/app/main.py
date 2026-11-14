@@ -16,7 +16,7 @@ from .api import routes
 from .api.deps import Services
 from .config import Settings, get_settings
 from .db import Database
-from .engine import cookies
+from .engine import cookies, netcompat
 from .services.events import EventBus
 from .services.jobs import JobManager
 from .services.library import Library
@@ -29,6 +29,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     settings.ensure_dirs()
     cookies.configure(settings.data_dir)
+    netcompat.tune_in_background()
     routes.DEFAULT_PREFS["max_concurrent"] = settings.max_concurrent_downloads
 
     @asynccontextmanager

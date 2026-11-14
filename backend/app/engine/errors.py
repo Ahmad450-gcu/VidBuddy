@@ -24,7 +24,9 @@ _RULES: list[tuple[str, str, str]] = [
     (r"private video|this video is private|login required|members[- ]only|requires? (an )?(account|authentication|login)|cookies",
      "auth", "This media needs a sign-in or is private. If your account can watch it, add sign-in cookies in Settings."),
     (r"available in your country|geo.?restrict|blocked it in your country|not available in your region", "geo", "This media isn't available in your region."),
-    (r"video unavailable|has been removed|does not exist|404|not found|no video formats found", "unavailable",
+    (r"no video formats found", "no_formats",
+     "The site didn't offer a downloadable stream for this media. Try again in a minute; if it keeps happening the site may have changed."),
+    (r"video unavailable|has been removed|does not exist|404|not found", "unavailable",
      "This media is unavailable or was removed."),
     (r"live event will begin|premieres in|is_live|live stream", "live", "Live streams that haven't finished can't be downloaded yet."),
     (r"requested format (is )?not available", "format", "That quality isn't available. Try another option."),
@@ -37,7 +39,7 @@ _RULES: list[tuple[str, str, str]] = [
     (r"http error 403|forbidden", "forbidden", "The site refused the request (403)."),
 ]
 
-RETRYABLE = {"network", "rate_limited", "blocked", "forbidden", "processing"}
+RETRYABLE = {"no_formats", "network", "rate_limited", "blocked", "forbidden", "processing"}
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
