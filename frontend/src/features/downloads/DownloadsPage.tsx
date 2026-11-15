@@ -11,6 +11,7 @@ import { formatSpeed, plural } from '../../lib/format'
 import { groupJobs, useDownloads, type JobGroup } from '../../stores/downloads'
 import { toast, toastError } from '../../stores/ui'
 import { JobRow } from './JobRow'
+import { LivePreview } from './LivePreview'
 
 const EMPTY: Record<JobGroup, { icon: React.ReactNode; title: string; body: string }> = {
   active: { icon: <ArrowDownToLine size={22} />, title: 'Nothing downloading', body: 'Paste a link on the Home screen and it will show up here with live progress.' },
@@ -131,6 +132,7 @@ export function DownloadsPage() {
         confirmLabel="Clear"
         onConfirm={() => bulk(() => api.clearJobs(tab === 'completed' ? 'completed' : 'failed'), 'Cleared')}
       />
+      <LivePreview />
     </div>
   )
 }

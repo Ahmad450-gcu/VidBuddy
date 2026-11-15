@@ -447,3 +447,131 @@ def test_hls_with_separate_audio_track_keeps_sound(client, media_server, tmp_pat
                          capture_output=True, text=True).stdout
     kinds = [st["codec_type"] for st in json.loads(out)["streams"]]
     assert "video" in kinds and "audio" in kinds, kinds
+
+
+# ------------------------------------------------------------- watch while downloading
+def _wait_downloading(client, job_id, min_bytes=1_000_000, timeout=30):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        j = client.get(f"/api/downloads/{job_id}").json()
+        if j["status"] == "downloading" and (j["downloaded_bytes"] or 0) > min_bytes:
+            return j
+        time.sleep(0.2)
+    raise AssertionError(f"download didn't get going: {j}")
+
+
+def test_preview_plays_while_downloading_and_download_still_finishes(client, media_server):
+    import threading
+    url = f"{media_server['base']}/slow/large_frag.mp4"
+    job_id = client.post("/api/downloads", json={"url": url, "kind": "video"}).json()["items"][0]["id"]
+    _wait_downloading(client, job_id)
+
+    got = bytearray()
+    with client.stream("GET", f"/api/downloads/{job_id}/preview") as r:
+        assert r.status_code == 200, r.read()
+        assert r.headers["content-type"] == "video/mp4"
+        # Keep watching while the download carries on: the file being read must not block
+        # the downloader's rename/cleanup (Windows file locking).
+        def watch():
+            for chunk in r.iter_bytes():
+                got.extend(chunk)
+        t = threading.Thread(target=watch, daemon=True)
+        t.start()
+        done = wait_for(client, job_id, {"completed", "failed"}, timeout=60)
+        t.join(timeout=30)
+    assert done["status"] == "completed", done
+    assert got[4:8] == b"ftyp" and b"moof" in got  # a fragmented MP4 a browser can play as it arrives
+    assert len(got) > 3_000_000  # it followed the file as it grew, not just the first bytes
+
+
+def test_preview_explains_files_that_cant_stream(client, media_server):
+    url = f"{media_server['base']}/slow/large.mp4"  # regular MP4: index written at the very end
+    job_id = client.post("/api/downloads", json={"url": url + "?unplayable", "kind": "video"}).json()["items"][0]["id"]
+    _wait_downloading(client, job_id)
+    r = client.get(f"/api/downloads/{job_id}/preview")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "unplayable"
+    client.post(f"/api/downloads/{job_id}/cancel")
+    wait_for(client, job_id, {"cancelled"}, timeout=15)
+
+
+def test_preview_of_queued_or_finished_download(client, media_server):
+    queued = client.post("/api/downloads", json={"url": f"{media_server['base']}/small.mp4?later", "kind": "video",
+                                                 "scheduled_at": time.time() + 3600}).json()["items"][0]
+    r = client.get(f"/api/downloads/{queued['id']}/preview")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "not_ready"
+    job = client.post("/api/downloads", json={"url": f"{media_server['base']}/small.mp4?done", "kind": "video"}).json()["items"][0]
+    done = wait_for(client, job["id"], {"completed", "failed"})
+    r = client.get(f"/api/downloads/{job['id']}/preview")
+    assert r.status_code == 409 and r.json()["detail"]["media_id"] == done["media_id"]
+
+
+# --------------------------------------------------------------- choosing the audio track
+def _sample_rates(client, media_id, tmp_path):
+    import json
+    import subprocess
+    from pathlib import Path
+    from app.engine.runtime import ffmpeg_location
+
+    target = tmp_path / f"{media_id}.mp4"
+    target.write_bytes(client.get(f"/api/media/{media_id}/stream").content)
+    ff = Path(ffmpeg_location())
+    ff = ff if ff.is_dir() else ff.parent
+    probe = next(p for p in (ff / "ffprobe.exe", ff / "ffprobe") if p.exists())
+    out = subprocess.run([str(probe), "-v", "error", "-show_streams", "-of", "json", str(target)],
+                         capture_output=True, text=True).stdout
+    streams = json.loads(out)["streams"]
+    assert any(s["codec_type"] == "video" for s in streams)
+    return [int(s["sample_rate"]) for s in streams if s["codec_type"] == "audio"]
+
+
+def _multi_tracks(client, media_server):
+    url = f"{media_server['base']}/hls_multi/master.m3u8"
+    data = client.post("/api/analyze", json={"url": url}).json()
+    audio = {f["language"]: f["format_id"] for f in data["formats"] if f["has_audio"] and not f["has_video"]}
+    video = next(f["format_id"] for f in data["formats"] if f["has_video"])
+    assert set(audio) == {"en", "hi"}, data["formats"]
+    return url, video, audio
+
+
+def test_chosen_audio_language_is_merged_with_chosen_video(client, media_server, tmp_path):
+    url, video, audio = _multi_tracks(client, media_server)
+    job = client.post("/api/downloads", json={"url": url, "kind": "video", "options": {
+        "quality": f"fmt:{video}", "audio_format_id": audio["hi"]}}).json()["items"][0]
+    assert job["options"]["audio_format_id"] == audio["hi"]
+    done = wait_for(client, job["id"], {"completed", "failed"})
+    assert done["status"] == "completed", done
+    assert _sample_rates(client, done["media_id"], tmp_path) == [22050]  # Hindi, and only Hindi
+
+
+def test_chosen_audio_language_with_a_quality_preset(client, media_server, tmp_path):
+    url, _, audio = _multi_tracks(client, media_server)
+    job = client.post("/api/downloads", json={"url": url, "kind": "video", "options": {
+        "quality": "best", "audio_format_id": audio["hi"]}}).json()["items"][0]
+    done = wait_for(client, job["id"], {"completed", "failed"})
+    assert done["status"] == "completed", done
+    assert _sample_rates(client, done["media_id"], tmp_path) == [22050]
+    job = client.post("/api/downloads", json={"url": url + "?english", "kind": "video", "options": {
+        "quality": "best", "audio_format_id": audio["en"]}}).json()["items"][0]
+    done = wait_for(client, job["id"], {"completed", "failed"})
+    assert _sample_rates(client, done["media_id"], tmp_path) == [44100]
+
+
+def test_chosen_audio_language_survives_retry(client, media_server, tmp_path):
+    url, video, audio = _multi_tracks(client, media_server)
+    handler = media_server["handler"]
+    handler.fail_paths = {"/hls_multi/audio_hi.m3u8"}  # the Hindi track is down
+    job_id = client.post("/api/downloads", json={"url": url + "?retry", "kind": "video", "options": {
+        "quality": f"fmt:{video}", "audio_format_id": audio["hi"]}}).json()["items"][0]["id"]
+    assert wait_for(client, job_id, {"completed", "failed"})["status"] == "failed"
+    handler.fail_paths = set()
+    client.post(f"/api/downloads/{job_id}/retry")
+    done = wait_for(client, job_id, {"completed", "failed"})
+    assert done["status"] == "completed", done
+    assert done["options"]["audio_format_id"] == audio["hi"]
+    assert _sample_rates(client, done["media_id"], tmp_path) == [22050]
+
+
+def test_audio_track_is_validated(client, media_server):
+    r = client.post("/api/downloads", json={"url": f"{media_server['base']}/small.mp4", "kind": "video",
+                                            "options": {"audio_format_id": "140+251"}})
+    assert r.status_code == 422

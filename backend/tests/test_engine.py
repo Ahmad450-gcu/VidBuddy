@@ -230,3 +230,49 @@ def test_download_options_keep_headers(tmp_path):
     opts = build_options(o, home=tmp_path, temp=tmp_path)
     assert opts["http_headers"]["Referer"] == "https://a.example/"
     assert DownloadOptions.from_dict({"kind": "video"}).headers == {}  # jobs saved before this feature
+
+
+def test_preview_part_selection_and_command():
+    import pytest
+    from app.engine.preview import PreviewUnavailable, choose_parts, ffmpeg_command, follow, output_format
+
+    audio = {"path": "a.m4a", "video": False, "audio": True, "acodec": "mp4a.40.2", "vcodec": "none"}
+    video = {"path": "v.mp4", "video": True, "audio": False, "vcodec": "avc1", "acodec": "none"}
+    assert choose_parts([audio, video], "video") == [video, audio]
+    assert choose_parts([audio, video], "audio") == [audio]
+    with pytest.raises(PreviewUnavailable):
+        choose_parts([audio], "video")  # audio comes first; wait for the video to start
+    cmd = ffmpeg_command("ffmpeg", ["u0", "u1"], [video, audio], "mp4")
+    assert cmd[cmd.index("-map") + 1] == "0:v:0?" and "1:a:0?" in cmd and "pipe:1" in cmd
+    assert output_format([video, audio]) == ("mp4", "video/mp4")
+    assert output_format([audio]) == ("mp4", "audio/mp4")
+    assert output_format([{"video": True, "audio": True, "vcodec": "vp8", "acodec": "vorbis"}])[0] == "webm"
+
+    import tempfile
+    from pathlib import Path
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "x.part"
+        f.write_bytes(b"abc")
+        part = {"tmp": str(f), "path": str(Path(d) / "x"), "done": False}
+        running = iter([True, False])
+        assert b"".join(follow(lambda: part, lambda: next(running), poll=0)) == b"abc"
+        f.rename(part["path"])  # finished and renamed: still found under the final name
+        assert b"".join(follow(lambda: {**part, "done": True}, lambda: True, poll=0)) == b"abc"
+
+
+def test_format_spec_with_audio_track():
+    import pytest
+    from app.engine.downloader import DownloadOptions, format_spec
+    from app.engine.security import UnsafeInputError
+
+    spec = lambda **kw: format_spec(DownloadOptions(**kw))[0]  # noqa: E731
+    assert spec(kind="video", quality="fmt:600", audio_format_id="aac-6._Hindi") == \
+        "600+aac-6._Hindi/600+ba/600"
+    assert spec(kind="video", quality="fmt:600+ba", audio_format_id="aac-3._English") == \
+        "600+aac-3._English/600+ba/600"
+    assert spec(kind="video", quality="h720", audio_format_id="251-1") == "bv+251-1/bv*+251-1/bv*+ba/b"
+    assert spec(kind="audio", audio_format_id="aac-4._Spanish") == "aac-4._Spanish/ba/b"
+    assert spec(kind="video", quality="best") == "bv*+ba/b"  # unchanged without a choice
+    for bad in ("a+b", "a/b", "a b", "x" * 100):
+        with pytest.raises(UnsafeInputError):
+            spec(kind="video", audio_format_id=bad)

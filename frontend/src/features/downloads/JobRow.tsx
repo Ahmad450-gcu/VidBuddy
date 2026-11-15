@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowDown, ArrowUp, CalendarClock, CircleAlert, CircleCheck, Copy, EllipsisVertical, FolderOpen, Music2, Pause, Play, RotateCcw, Trash2, X, Zap,
+  ArrowDown, ArrowUp, CalendarClock, CircleAlert, CircleCheck, Copy, EllipsisVertical, FolderOpen, Headphones, MonitorPlay, Music2, Pause, Play, RotateCcw, Trash2, X, Zap,
 } from 'lucide-react'
 import { IconButton } from '../../components/ui/Button'
 import { Badge, ProgressBar } from '../../components/ui/Feedback'
@@ -14,6 +14,7 @@ import type { Job } from '../../lib/types'
 import { jobActions } from '../../stores/downloads'
 import { usePlayer } from '../../stores/player'
 import { toast, toastError } from '../../stores/ui'
+import { canPreview, useLivePreview } from './liveStore'
 
 const STAGE_LABEL: Record<string, string> = {
   starting: 'Starting…',
@@ -117,6 +118,11 @@ export const JobRow = memo(function JobRow({ job }: { job: Job }) {
           {job.playlist_title && <span className="truncate">· {job.playlist_title}</span>}
           <Badge className="ml-0.5 shrink-0">{job.kind === 'audio' ? job.options.audio_format.toUpperCase() : job.options.container.toUpperCase()}</Badge>
           {job.options.quality?.startsWith('h') && job.kind === 'video' && <Badge className="shrink-0">≤{job.options.quality.slice(1)}p</Badge>}
+          {job.options.audio_format_id && (
+            <Badge className="max-w-28 shrink truncate">
+              {job.options.audio_format_id}
+            </Badge>
+          )}
         </div>
         {(active || job.status === 'paused') && (
           <ProgressBar
@@ -142,6 +148,15 @@ export const JobRow = memo(function JobRow({ job }: { job: Job }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5">
+        {canPreview(job) && (
+          <IconButton
+            label={job.kind === 'video' ? 'Watch while downloading' : 'Listen while downloading'}
+            size="sm"
+            onClick={() => useLivePreview.getState().open(job.id)}
+          >
+            {job.kind === 'video' ? <MonitorPlay size={16} /> : <Headphones size={16} />}
+          </IconButton>
+        )}
         {active && !busyStage && (
           <IconButton label="Pause" size="sm" onClick={() => run(() => jobActions.pause(job.id), "Couldn't pause")}>
             <Pause size={16} />

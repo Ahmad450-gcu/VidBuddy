@@ -40,6 +40,11 @@ def _make_media() -> dict[str, Path]:
         subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=20:size=640x360:rate=25",
                         "-f", "lavfi", "-i", "anoisesrc=duration=20", "-c:v", "libx264", "-preset", "ultrafast",
                         "-b:v", "2400k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(out["large"])], check=True)
+    # Same video as a fragmented MP4 (index first), the layout streaming sites and DASH use.
+    out["large_frag"] = ASSETS / "large_frag.mp4"
+    if not out["large_frag"].exists():
+        subprocess.run([ff, "-y", "-loglevel", "error", "-i", str(out["large"]), "-c", "copy",
+                        "-movflags", "frag_keyframe+empty_moov+default_base_moof", str(out["large_frag"])], check=True)
     hls = ASSETS / "hls"
     if not (hls / "index.m3u8").exists():
         hls.mkdir(exist_ok=True)
@@ -63,6 +68,26 @@ def _make_media() -> dict[str, Path]:
             '#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=320x240,AUDIO="aud"\n'
             "video.m3u8\n")
     out["hls_split"] = split / "master.m3u8"
+    # One video, two audio languages. Hindi is 22.05 kHz, English 44.1 kHz, so a test can tell
+    # from the finished file which language was merged in.
+    multi = ASSETS / "hls_multi"
+    if not (multi / "master.m3u8").exists():
+        multi.mkdir(exist_ok=True)
+        subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=4:size=320x240:rate=15",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", "-f", "hls", "-hls_list_size", "0",
+                        "-hls_segment_filename", str(multi / "v%d.ts"), str(multi / "video.m3u8")], check=True)
+        for lang, rate in (("en", "44100"), ("hi", "22050")):
+            subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", f"sine=frequency=440:duration=4:sample_rate={rate}",
+                            "-c:a", "aac", "-vn", "-f", "hls", "-hls_list_size", "0",
+                            "-hls_segment_filename", str(multi / f"{lang}%d.aac"), str(multi / f"audio_{lang}.m3u8")],
+                           check=True)
+        (multi / "master.m3u8").write_text(
+            "#EXTM3U\n"
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aac",LANGUAGE="en",NAME="English",DEFAULT=YES,AUTOSELECT=YES,URI="audio_en.m3u8"\n'
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aac",LANGUAGE="hi",NAME="Hindi",DEFAULT=NO,AUTOSELECT=YES,URI="audio_hi.m3u8"\n'
+            '#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=320x240,AUDIO="aac"\n'
+            "video.m3u8\n")
+    out["hls_multi"] = multi / "master.m3u8"
     out["page"].write_text("<html><head><title>No media here</title></head><body><p>Just text.</p></body></html>")
     return out
 

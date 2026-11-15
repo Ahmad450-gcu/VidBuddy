@@ -25,6 +25,7 @@ class DownloadOptionsIn(BaseModel):
     filename_template: str | None = Field(default=None, max_length=200)
     max_filesize_mb: int = Field(default=0, ge=0, le=1_000_000)
     rate_limit_kbps: int = Field(default=0, ge=0, le=10_000_000)
+    audio_format_id: str | None = Field(default=None, max_length=80)  # audio track to merge in
 
 
 class EntryIn(BaseModel):

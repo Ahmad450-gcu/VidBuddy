@@ -118,6 +118,11 @@ class JobManager:
             loop.run_in_executor(self._pool, self._run, job["id"])
 
     # -------------------------------------------------------------- worker
+    def is_running(self, job_id: str) -> bool:
+        """True while the job's worker is actively downloading (not stopping)."""
+        with self._flags_lock:
+            return job_id in self._stop_flags and self._stop_flags[job_id] is None
+
     def _stop_reason(self, job_id: str) -> str | None:
         with self._flags_lock:
             return self._stop_flags.get(job_id)

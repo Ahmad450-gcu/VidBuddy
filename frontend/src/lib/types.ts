@@ -120,6 +120,8 @@ export interface DownloadOptions {
   embed_metadata: boolean
   embed_thumbnail: boolean
   filename_template?: string | null
+  /** A specific audio track (format id) to merge with the video; null = best audio. */
+  audio_format_id?: string | null
 }
 
 export interface Job {

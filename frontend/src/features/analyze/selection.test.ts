@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MediaAnalysis } from '../../lib/types'
 import { DEFAULT_PREFS } from '../../stores/prefs'
-import { estimateSize, initialSelection, toOptions } from './selection'
+import { audioTracks, estimateSize, initialSelection, toOptions, trackLabel } from './selection'
 
 const analysis = (over: Partial<MediaAnalysis> = {}): MediaAnalysis => ({
   type: 'media',
@@ -62,5 +62,27 @@ describe('toOptions / estimateSize', () => {
     expect(estimateSize(analysis(), { ...base, kind: 'audio', audioFormat: 'mp3', audioBitrate: 128 })).toBe(1_600_000)
     expect(estimateSize(analysis(), { ...base, kind: 'video', quality: 'fmt:137' })).toBe(51_000_000)
     expect(estimateSize(analysis(), { ...base, kind: 'video', quality: 'h480' })).toBe(10_000_000)
+  })
+})
+
+describe('audio track', () => {
+  const multi = analysis({
+    formats: [
+      { format_id: '600', ext: 'mp4', height: 720, width: 1280, fps: 25, vcodec: null, acodec: null, abr: null, tbr: 600, filesize: 40_000_000, exact_size: false, protocol: 'm3u8_native', note: null, has_video: true, has_audio: false, dynamic_range: null, language: null },
+      { format_id: 'aac-3._English', ext: 'mp4', height: null, width: null, fps: null, vcodec: null, acodec: null, abr: 128, tbr: null, filesize: 2_000_000, exact_size: false, protocol: 'm3u8_native', note: 'English', has_video: false, has_audio: true, dynamic_range: null, language: 'en' },
+      { format_id: 'aac-6._Hindi', ext: 'mp4', height: null, width: null, fps: null, vcodec: null, acodec: null, abr: 96, tbr: null, filesize: 1_500_000, exact_size: false, protocol: 'm3u8_native', note: 'Hindi', has_video: false, has_audio: true, dynamic_range: null, language: 'hi' },
+    ],
+  })
+
+  it('lists the audio-only tracks with readable labels', () => {
+    expect(audioTracks(multi).map((f) => f.format_id)).toEqual(['aac-3._English', 'aac-6._Hindi'])
+    expect(trackLabel(audioTracks(multi)[1])).toBe('Hindi · aac-6._Hindi · 96 kbps')
+  })
+
+  it('sends the chosen track with the download and counts its size', () => {
+    const sel = { ...initialSelection(multi, DEFAULT_PREFS), kind: 'video' as const, quality: 'fmt:600', audioTrack: 'aac-6._Hindi' }
+    expect(toOptions(sel, DEFAULT_PREFS)).toMatchObject({ quality: 'fmt:600', audio_format_id: 'aac-6._Hindi' })
+    expect(estimateSize(multi, sel)).toBe(41_500_000)
+    expect(toOptions({ ...sel, audioTrack: null }, DEFAULT_PREFS).audio_format_id).toBeNull()
   })
 })

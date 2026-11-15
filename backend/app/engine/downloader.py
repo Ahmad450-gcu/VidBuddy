@@ -28,6 +28,50 @@ _FORMAT_ID = re.compile(r"^[A-Za-z0-9_\-.+/]{1,80}$")
 EMBED_THUMB_AUDIO = {"mp3", "m4a", "opus", "flac"}
 
 
+# ------------------------------------------------------------- watch while downloading
+# The files a running download is writing (in its temp folder), and which of them carry video
+# and/or audio, so the preview stream can play what has arrived so far. Keyed by temp folder.
+_live: dict[str, dict[str, dict[str, Any]]] = {}
+
+
+def live_parts(temp: Path) -> list[dict[str, Any]]:
+    return list((_live.get(str(temp.resolve())) or {}).values())
+
+
+def _has(codec: Any) -> bool:
+    return codec != "none"  # unknown (None) counts as present
+
+
+_audio_first_installed = False
+
+
+def install_audio_first() -> None:
+    """Download the audio track before the video when both are fetched separately.
+
+    yt-dlp fetches the parts of a "video+audio" download one after another, video first. Audio
+    is small, so fetching it first means a preview of the half-downloaded video has sound
+    almost immediately. Only download jobs ask for this (``_vb_audio_first``).
+    """
+    global _audio_first_installed
+    if _audio_first_installed:
+        return
+    _audio_first_installed = True
+    original = yt_dlp.YoutubeDL.process_info
+
+    def process_info(self, info_dict):
+        req = info_dict.get("requested_formats")
+        if (self.params.get("_vb_audio_first") and isinstance(req, (list, tuple)) and len(req) == 2
+                and req[0].get("acodec") == "none" and req[0].get("vcodec") != "none"
+                and req[1].get("vcodec") == "none" and req[1].get("acodec") != "none"):
+            info_dict["requested_formats"] = [req[1], req[0]]
+        return original(self, info_dict)
+
+    yt_dlp.YoutubeDL.process_info = process_info
+
+
+install_audio_first()
+
+
 class JobInterrupted(Exception):
     def __init__(self, reason: str):
         super().__init__(reason)
@@ -50,6 +94,9 @@ class DownloadOptions:
     max_filesize_mb: int = 0
     rate_limit_kbps: int = 0
     headers: dict[str, str] = field(default_factory=dict)  # custom request headers (Referer, ...)
+    # A specific audio track (format id) to merge with the video, e.g. one language of several.
+    # None = the best audio. Falls back to the best audio if the site stops offering that track.
+    audio_format_id: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "DownloadOptions":
@@ -76,15 +123,28 @@ class DownloadResult:
     thumbnail_ext: str | None
 
 
+def _audio_track(o: DownloadOptions) -> str | None:
+    aid = (o.audio_format_id or "").strip()
+    if not aid:
+        return None
+    if not _FORMAT_ID.match(aid) or "+" in aid or "/" in aid:
+        raise UnsafeInputError("Invalid audio track.")
+    return aid
+
+
 def format_spec(o: DownloadOptions) -> tuple[str, list[str]]:
-    """Return (format selector, format_sort) for the requested quality."""
+    """Return (format selector, format_sort) for the requested quality (and audio track)."""
+    aid = _audio_track(o)
     if o.kind == "audio":
-        return "ba/b", ["abr", "asr"]
+        return (f"{aid}/ba/b" if aid else "ba/b"), ["abr", "asr"]
     q = o.quality or "best"
     if q.startswith("fmt:"):
         fid = q[4:]
         if not _FORMAT_ID.match(fid):
             raise UnsafeInputError("Invalid format id.")
+        if aid:  # exactly this video with exactly this audio, e.g. 600+aac-6._Hindi
+            video = fid.split("+")[0].split("/")[0]
+            return f"{video}+{aid}/{video}+ba/{video}", []
         return (fid if "+" in fid else f"{fid}+ba/{fid}"), []
     sort: list[str] = []
     if q.startswith("h") and q[1:].isdigit():
@@ -95,6 +155,8 @@ def format_spec(o: DownloadOptions) -> tuple[str, list[str]]:
         sort += ["vcodec:h264", "acodec:aac"]  # broadest playback (incl. iOS Safari)
     elif o.container == "webm":
         sort += ["vcodec:vp9", "acodec:opus"]
+    if aid:  # a video-only stream first, so the chosen track is the file's only audio
+        return f"bv+{aid}/bv*+{aid}/bv*+ba/b", sort
     return "bv*+ba/b", sort
 
 
@@ -106,6 +168,9 @@ def build_options(o: DownloadOptions, *, home: Path, temp: Path) -> dict[str, An
     if o.audio_format not in ("mp3", "m4a", "aac", "opus", "flac", "wav", "best"):
         raise UnsafeInputError("Unsupported audio format.")
     template = validate_template(o.filename_template)
+    aid = _audio_track(o)
+    if aid:  # each language gets its own file instead of reusing the one already downloaded
+        template = template[: -len(".%(ext)s")] + f" [{aid}].%(ext)s"
     o.headers = clean_headers(o.headers)
     fmt, sort = format_spec(o)
     opts = base_options(30)
@@ -133,6 +198,7 @@ def build_options(o: DownloadOptions, *, home: Path, temp: Path) -> dict[str, An
 
     if o.kind == "video":
         opts["merge_output_format"] = o.container
+        opts["_vb_audio_first"] = True
         if o.embed_metadata:
             pps.append({"key": "FFmpegMetadata", "add_metadata": True, "add_chapters": True})
     else:
@@ -171,6 +237,8 @@ def run_download(
 
     parts: dict[str, tuple[int, int | None]] = {}
     expected_parts = [1]
+    live = _live.setdefault(str(temp.resolve()), {})
+    live.clear()
     last_emit = [0.0]
 
     def hook(d: dict[str, Any]) -> None:
@@ -183,6 +251,13 @@ def run_download(
         if req:
             expected_parts[0] = len(req)
         name = d.get("filename") or d.get("tmpfilename") or "f"
+        if status in ("downloading", "finished") and d.get("filename"):
+            live[name] = {
+                "path": d["filename"], "tmp": d.get("tmpfilename"), "done": status == "finished",
+                "video": _has(info.get("vcodec")) and info.get("video_ext") != "none",
+                "audio": _has(info.get("acodec")),
+                "vcodec": info.get("vcodec"), "acodec": info.get("acodec"), "ext": info.get("ext"),
+            }
         if status == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate")
             parts[name] = (int(d.get("downloaded_bytes") or 0), int(total) if total else None)

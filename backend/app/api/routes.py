@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -12,12 +14,16 @@ from fastapi.responses import FileResponse, StreamingResponse
 from ..engine import cookies, extractor
 from ..engine.errors import EngineError, classify
 from ..engine.headers import cache_key, parse_headers
+from ..engine.downloader import live_parts
+from ..engine.preview import PreviewStream, PreviewUnavailable, PreviewUnplayable
+from ..engine.runtime import ffmpeg_location
 from ..engine.runtime import engine_versions
 from ..engine.security import UnsafeInputError, validate_template, validate_url
 from ..engine.sources import identify, supported_sites
 from . import schemas as S
 from .deps import Services, rate_limited, require_auth, services
 
+log = logging.getLogger("haul.api")
 router = APIRouter(prefix="/api", dependencies=[Depends(require_auth)])
 
 DEFAULT_PREFS: dict[str, Any] = {
@@ -153,6 +159,57 @@ async def create_download(body: S.CreateDownloadRequest, svc: Services = Depends
     except UnsafeInputError as e:
         raise _bad(e, 422)
     return {"items": jobs}
+
+
+@router.get("/downloads/{job_id}/preview")
+async def preview_download(job_id: str, svc: Services = Depends(services)):
+    """Play what a running (or paused) download has fetched so far, as a live MP4/WebM stream."""
+    job = svc.jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Download not found.")
+    if job["status"] == "completed":
+        raise HTTPException(409, {"code": "completed", "message": "This download has finished. Open it from your library.",
+                                  "media_id": job.get("media_id")})
+    if job["status"] in ("failed", "cancelled"):
+        raise HTTPException(409, {"code": "not_ready", "message": "This download isn't running."})
+    ff = ffmpeg_location()
+    if not ff:
+        raise HTTPException(409, {"code": "not_ready", "message": "Playing while downloading needs FFmpeg."})
+    if Path(ff).is_dir():
+        ff = str(Path(ff) / ("ffmpeg.exe" if (Path(ff) / "ffmpeg.exe").exists() else "ffmpeg"))
+    temp = svc.jobs.temp_root / job_id
+    parts = live_parts(temp)
+
+    def refresh(part: dict[str, Any]) -> dict[str, Any]:  # the part's latest state (done yet?)
+        return next((p for p in live_parts(temp) if p["path"] == part["path"]), part)
+
+    try:
+        stream = await asyncio.to_thread(PreviewStream, ff, parts, job["kind"],
+                                         lambda: svc.jobs.is_running(job_id), refresh)
+    except PreviewUnplayable as e:
+        raise HTTPException(409, {"code": "unplayable", "message": str(e)})
+    except PreviewUnavailable as e:
+        raise HTTPException(409, {"code": "not_ready", "message": str(e)})
+    first = await asyncio.to_thread(stream.read)
+    if not first:
+        detail = await asyncio.to_thread(stream.error)
+        await asyncio.to_thread(stream.close)
+        log.info("Preview of %s failed: %s", job_id, detail)
+        raise HTTPException(409, {"code": "unplayable", "message": (
+            "This download can't be played until it finishes: its file format keeps the index at the end.")})
+
+    async def body():
+        try:
+            yield first
+            while True:
+                chunk = await asyncio.to_thread(stream.read)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            await asyncio.to_thread(stream.close)
+
+    return StreamingResponse(body(), media_type=stream.media_type, headers={"Cache-Control": "no-store"})
 
 
 def _job_action(fn, job_id: str):

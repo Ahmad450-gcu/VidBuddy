@@ -1,4 +1,4 @@
-import type { AudioFormat, Container, DownloadOptions, MediaAnalysis, MediaKind, Preferences } from '../../lib/types'
+import type { AudioFormat, Container, DownloadOptions, Format, MediaAnalysis, MediaKind, Preferences } from '../../lib/types'
 
 /** What the user picked in the analysis card. Pure data, so it can be unit tested. */
 export interface Selection {
@@ -11,6 +11,8 @@ export interface Selection {
   subtitleLang: string
   autoSubtitles: boolean
   embedThumbnail: boolean
+  /** Audio-only format id to merge in (one language of several); null = the best audio. */
+  audioTrack: string | null
 }
 
 export const LOSSLESS: AudioFormat[] = ['flac', 'wav']
@@ -36,6 +38,7 @@ export function initialSelection(a: MediaAnalysis, prefs: Preferences): Selectio
     subtitleLang: preferredLang,
     autoSubtitles: !a.subtitles.manual.includes(preferredLang),
     embedThumbnail: prefs.embed_thumbnail,
+    audioTrack: null,
   }
 }
 
@@ -51,6 +54,7 @@ export function toOptions(sel: Selection, prefs: Pick<Preferences, 'embed_metada
     embed_metadata: prefs.embed_metadata,
     embed_thumbnail: sel.embedThumbnail,
     filename_template: prefs.filename_template,
+    audio_format_id: sel.audioTrack,
   }
 }
 
@@ -63,11 +67,35 @@ export function estimateSize(a: MediaAnalysis, sel: Selection): number | null {
     const kbps = sel.audioBitrate || (sel.audioFormat === 'opus' ? 160 : 245)
     return Math.round((kbps * 1000 * a.duration) / 8)
   }
+  const track = sel.audioTrack ? a.formats.find((x) => x.format_id === sel.audioTrack) : undefined
+  const audioSize = track ? track.filesize : a.presets.audio.size_estimate
   if (sel.quality.startsWith('fmt:')) {
     const f = a.formats.find((x) => x.format_id === sel.quality.slice(4))
     if (!f?.filesize) return null
-    return f.has_audio ? f.filesize : f.filesize + (a.presets.audio.size_estimate ?? 0)
+    return f.has_audio && !track ? f.filesize : f.filesize + (audioSize ?? 0)
   }
   if (sel.quality === 'best') return a.presets.video[0]?.size_estimate ?? null
   return a.presets.video.find((v) => v.id === sel.quality)?.size_estimate ?? null
+}
+
+/** The audio-only streams, i.e. the tracks (often one per language) that can be merged with a video. */
+export function audioTracks(a: MediaAnalysis): Format[] {
+  return a.formats.filter((f) => f.has_audio && !f.has_video)
+}
+
+let languageNames: Intl.DisplayNames | null = null
+function languageName(code: string): string {
+  try {
+    languageNames ??= new Intl.DisplayNames(['en'], { type: 'language' })
+    return languageNames.of(code) ?? code
+  } catch {
+    return code
+  }
+}
+
+/** "Hindi · aac-6._Hindi · 128 kbps": language first when the site says what it is. */
+export function trackLabel(f: Format): string {
+  const lang = f.language && f.language !== 'und' ? languageName(f.language) : null
+  const kbps = f.abr ? `${Math.round(f.abr)} kbps` : f.tbr ? `${Math.round(f.tbr)} kbps` : null
+  return [lang, f.note && f.note !== lang ? f.note : null, f.format_id, kbps].filter(Boolean).join(' · ')
 }

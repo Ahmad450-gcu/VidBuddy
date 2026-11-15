@@ -9,11 +9,11 @@ import { Thumb } from '../../components/ui/Thumb'
 import { api } from '../../lib/api'
 import { cn } from '../../lib/cn'
 import { formatBytes, formatCount, formatDuration } from '../../lib/format'
-import type { AudioFormat, Container, MediaAnalysis, MediaKind } from '../../lib/types'
+import type { AudioFormat, Container, Format, MediaAnalysis, MediaKind } from '../../lib/types'
 import { useDownloads } from '../../stores/downloads'
 import { usePrefs } from '../../stores/prefs'
 import { toast, toastError } from '../../stores/ui'
-import { estimateSize, initialSelection, LOSSLESS, toOptions, type Selection } from './selection'
+import { audioTracks, estimateSize, initialSelection, LOSSLESS, toOptions, trackLabel, type Selection } from './selection'
 import { useAnalysis } from './analysisStore'
 
 type Tab = MediaKind | 'advanced'
@@ -109,7 +109,7 @@ export function MediaOptions({ data, onQueued }: { data: MediaAnalysis; onQueued
           value={tab}
           onChange={(t) => {
             setTab(t)
-            if (t !== 'advanced') update({ kind: t, quality: t === 'video' && sel.quality.startsWith('fmt:') ? 'best' : sel.quality })
+            if (t !== 'advanced') update({ kind: t, quality: sel.quality.startsWith('fmt:') ? 'best' : sel.quality })
           }}
           options={tabs}
           className="w-full sm:w-auto"
@@ -144,8 +144,34 @@ export function MediaOptions({ data, onQueued }: { data: MediaAnalysis; onQueued
   )
 }
 
+/** Which audio track to merge in, shown only when the source has more than one to choose from. */
+function AudioTrackPicker({ tracks, value, onChange, label = 'Audio track', hint }: {
+  tracks: Format[]
+  value: string | null
+  onChange: (id: string | null) => void
+  label?: string
+  hint?: string
+}) {
+  if (tracks.length < 2) return null
+  return (
+    <div>
+      <h3 className="mb-2 text-[12px] font-medium text-fg-2">{label}</h3>
+      <Select aria-label={label} value={value ?? ''} onChange={(e) => onChange(e.target.value || null)} className="w-full sm:max-w-md">
+        <option value="">Automatic (best audio)</option>
+        {tracks.map((t) => (
+          <option key={t.format_id} value={t.format_id}>
+            {trackLabel(t)}
+          </option>
+        ))}
+      </Select>
+      {hint && <p className="mt-1.5 text-[12px] text-fg-3">{hint}</p>}
+    </div>
+  )
+}
+
 function VideoPanel({ data, sel, update, subtitleLangs }: { data: MediaAnalysis; sel: Selection; update: (p: Partial<Selection>) => void; subtitleLangs: string[] }) {
   const best = data.presets.video[0]
+  const tracks = useMemo(() => audioTracks(data), [data])
   return (
     <div className="space-y-5">
       <div>
@@ -162,6 +188,7 @@ function VideoPanel({ data, sel, update, subtitleLangs }: { data: MediaAnalysis;
           ))}
         </div>
       </div>
+      <AudioTrackPicker tracks={tracks} value={sel.audioTrack} onChange={(audioTrack) => update({ audioTrack })} hint="Choose the language that gets merged with the video." />
       <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
         <div>
           <h3 className="mb-2 text-[12px] font-medium text-fg-2">Format</h3>
@@ -211,8 +238,10 @@ function VideoPanel({ data, sel, update, subtitleLangs }: { data: MediaAnalysis;
 
 function AudioPanel({ data, sel, update }: { data: MediaAnalysis; sel: Selection; update: (p: Partial<Selection>) => void }) {
   const lossless = LOSSLESS.includes(sel.audioFormat)
+  const tracks = useMemo(() => audioTracks(data), [data])
   return (
     <div className="space-y-5">
+      <AudioTrackPicker tracks={tracks} value={sel.audioTrack} onChange={(audioTrack) => update({ audioTrack })} />
       <div>
         <h3 className="mb-2 text-[12px] font-medium text-fg-2">Format</h3>
         <div className="flex flex-wrap gap-2">
@@ -262,9 +291,30 @@ function AdvancedPanel({ data, sel, update }: { data: MediaAnalysis; sel: Select
     [data.formats],
   )
   const visible = showAll ? rows : rows.slice(0, 12)
+  const tracks = useMemo(() => audioTracks(data), [data])
+  const picked = sel.quality.startsWith('fmt:') ? data.formats.find((f) => `fmt:${f.format_id}` === sel.quality) : undefined
+  const pairing = sel.kind === 'video' && !!picked?.has_video && !picked.has_audio
+  const choose = (f: Format) => {
+    if (f.has_video) update({ quality: `fmt:${f.format_id}`, kind: 'video' })
+    else if (pairing) update({ audioTrack: f.format_id }) // keep the video, merge this audio with it
+    else update({ quality: `fmt:${f.format_id}`, kind: 'audio', audioTrack: f.format_id })
+  }
+  const trackName = sel.audioTrack ? data.formats.find((f) => f.format_id === sel.audioTrack) : undefined
   return (
     <div>
-      <p className="mb-3 text-[12.5px] text-fg-3">Pick an exact stream. Video-only streams are merged with the best audio automatically.</p>
+      <p className="mb-3 text-[12.5px] text-fg-3">
+        Pick an exact stream. For a video-only stream, then pick an audio-only row (or a track below) to merge with it;
+        otherwise the best audio is used.
+      </p>
+      {pairing && (
+        <div className="mb-3 space-y-3 rounded-md bg-surface-2 px-3 py-2.5">
+          <p className="text-[12.5px] text-fg-2">
+            Downloads <span className="font-mono text-fg">{picked.format_id}</span> +{' '}
+            <span className="font-mono text-fg">{trackName ? trackName.format_id : 'best audio'}</span>
+          </p>
+          <AudioTrackPicker tracks={tracks} value={sel.audioTrack} onChange={(audioTrack) => update({ audioTrack })} label="Merge with audio" />
+        </div>
+      )}
       <div className="scrollbar-thin overflow-x-auto rounded-md ring-1 ring-line">
         <table className="w-full min-w-[560px] text-left text-[12.5px] tabular">
           <thead className="bg-surface-2 text-fg-3">
@@ -281,11 +331,13 @@ function AdvancedPanel({ data, sel, update }: { data: MediaAnalysis; sel: Select
           <tbody>
             {visible.map((f) => {
               const id = `fmt:${f.format_id}`
-              const selected = sel.quality === id
+              const merged = pairing && sel.audioTrack === f.format_id
+              const selected = sel.quality === id || merged
               return (
                 <tr
                   key={f.format_id}
-                  onClick={() => update({ quality: id, kind: f.has_video ? 'video' : 'audio' })}
+                  onClick={() => choose(f)}
+                  aria-selected={selected}
                   className={cn('cursor-pointer border-t border-line', selected ? 'bg-accent-soft' : 'hover:bg-surface-2')}
                 >
                   <td className="px-3 py-2">{selected && <Check size={14} className="text-accent" />}</td>
@@ -293,6 +345,8 @@ function AdvancedPanel({ data, sel, update }: { data: MediaAnalysis; sel: Select
                   <td className="px-2 py-2">
                     {f.has_video && f.has_audio ? 'Video + audio' : f.has_video ? 'Video only' : 'Audio only'}
                     <span className="ml-1 text-fg-3">{f.ext}</span>
+                    {!f.has_video && f.language && f.language !== 'und' && <span className="ml-1 text-fg-2">· {f.language}</span>}
+                    {merged && <span className="ml-1.5 text-[11px] font-medium text-accent">merged</span>}
                   </td>
                   <td className="px-2 py-2">{f.height ? `${f.width ?? '?'}×${f.height}${f.fps ? ` ${Math.round(f.fps)}fps` : ''}` : '–'}</td>
                   <td className="max-w-[140px] truncate px-2 py-2 text-fg-2">{[f.vcodec, f.acodec].filter(Boolean).join(' + ') || '–'}</td>
