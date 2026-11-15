@@ -105,6 +105,8 @@ export interface CreateDownload {
   scheduled_at?: number | null
   entries?: { url: string; title?: string; thumbnail?: string | null }[]
   playlist_title?: string | null
+  /** Optional request headers (raw text: `Name: value` lines, a cURL command, ...). */
+  headers?: string
 }
 
 export interface MediaQuery {
@@ -124,7 +126,8 @@ export const api = {
   revealMedia: (id: string) => request<void>('POST', `/media/${id}/reveal`),
   openMediaFolder: () => request<void>('POST', '/system/open-media-folder'),
   health: () => request<{ ok: boolean }>('GET', '/health'),
-  analyze: (url: string, refresh = false) => request<Analysis>('POST', '/analyze', { url, refresh }),
+  analyze: (url: string, refresh = false, headers = '') =>
+    request<Analysis>('POST', '/analyze', { url, refresh, ...(headers.trim() ? { headers } : {}) }),
 
   downloads: (status?: string) =>
     request<{ items: Job[]; counts: Record<string, number>; concurrency: number }>('GET', '/downloads', undefined, { status }),

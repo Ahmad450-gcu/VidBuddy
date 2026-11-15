@@ -40,13 +40,24 @@ def _make_media() -> dict[str, Path]:
         subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=duration=20:size=640x360:rate=25",
                         "-f", "lavfi", "-i", "anoisesrc=duration=20", "-c:v", "libx264", "-preset", "ultrafast",
                         "-b:v", "2400k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(out["large"])], check=True)
+    hls = ASSETS / "hls"
+    if not (hls / "index.m3u8").exists():
+        hls.mkdir(exist_ok=True)
+        subprocess.run([ff, "-y", "-loglevel", "error", "-i", str(out["small"]), "-c", "copy", "-f", "hls",
+                        "-hls_time", "1", "-hls_list_size", "0", "-hls_segment_filename", str(hls / "seg%d.ts"),
+                        str(hls / "index.m3u8")], check=True)
+    out["hls"] = hls / "index.m3u8"
     out["page"].write_text("<html><head><title>No media here</title></head><body><p>Just text.</p></body></html>")
     return out
+
+
+GUARD_REFERER = "https://player.example/watch"
 
 
 class _Handler(http.server.SimpleHTTPRequestHandler):
     throttle_bps: int = 0
     fail_paths: set[str] = set()
+    seen_headers: list[dict[str, str]] = []
 
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(ASSETS), **kw)
@@ -59,7 +70,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         if path in self.fail_paths:
             self.send_error(404, "Not Found")
             return
-        f = Path(ASSETS / path.lstrip("/").replace("slow/", ""))
+        # /guarded/... behaves like a player's CDN: it only answers requests with the right Referer.
+        if path.startswith("/guarded/"):
+            _Handler.seen_headers.append(dict(self.headers))
+            if self.headers.get("Referer") != GUARD_REFERER or self.headers.get("X-Token") != "abc123":
+                self.send_error(403, "Forbidden")
+                return
+        f = Path(ASSETS / path.lstrip("/").replace("guarded/", "").replace("slow/", ""))
         if not f.is_file():
             self.send_error(404)
             return
@@ -74,12 +91,13 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Range", f"bytes {start}-{end}/{data_len}")
         else:
             self.send_response(200)
-        ctype = "text/html" if f.suffix == ".html" else "video/mp4"
+        ctype = {".html": "text/html", ".m3u8": "application/vnd.apple.mpegurl",
+                 ".ts": "video/mp2t"}.get(f.suffix, "video/mp4")
         self.send_header("Content-Type", ctype)
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Content-Length", str(end - start + 1))
         self.end_headers()
-        slow = path.startswith("/slow/")
+        slow = "/slow/" in path
         with f.open("rb") as fh:
             fh.seek(start)
             remaining = end - start + 1

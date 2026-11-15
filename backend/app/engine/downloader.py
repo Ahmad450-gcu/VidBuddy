@@ -18,6 +18,7 @@ import yt_dlp
 
 from .errors import EngineError, classify
 from .extractor import _QuietLogger, base_options
+from .headers import apply_headers, clean_headers
 from .security import UnsafeInputError, validate_template
 from .sources import browser_fallbacks, remember_browser, tune_for, use_browser
 
@@ -48,6 +49,7 @@ class DownloadOptions:
     filename_template: str | None = None
     max_filesize_mb: int = 0
     rate_limit_kbps: int = 0
+    headers: dict[str, str] = field(default_factory=dict)  # custom request headers (Referer, ...)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "DownloadOptions":
@@ -104,6 +106,7 @@ def build_options(o: DownloadOptions, *, home: Path, temp: Path) -> dict[str, An
     if o.audio_format not in ("mp3", "m4a", "aac", "opus", "flac", "wav", "best"):
         raise UnsafeInputError("Unsupported audio format.")
     template = validate_template(o.filename_template)
+    o.headers = clean_headers(o.headers)
     fmt, sort = format_spec(o)
     opts = base_options(30)
     opts.update({
@@ -121,6 +124,7 @@ def build_options(o: DownloadOptions, *, home: Path, temp: Path) -> dict[str, An
         "postprocessors": [],
         "trim_file_name": 200,
     })
+    apply_headers(opts, o.headers)
     pps: list[dict[str, Any]] = opts["postprocessors"]
     if o.max_filesize_mb > 0:
         opts["max_filesize"] = o.max_filesize_mb * 1024 * 1024
@@ -333,6 +337,7 @@ def fetch_subtitles(url: str, o: DownloadOptions, media: Path, should_stop: Call
             "postprocessors": [{"key": "FFmpegSubtitlesConvertor", "format": "vtt", "when": "before_dl"}],
         })
         tune_for(url, opts)
+        apply_headers(opts, o.headers)
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.extract_info(url, download=True)

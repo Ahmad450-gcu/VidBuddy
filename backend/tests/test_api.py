@@ -338,3 +338,87 @@ def test_desktop_only_actions(client, media_server, monkeypatch):
     assert client.post("/api/media/nope/reveal").status_code == 404
     assert opened[0][0].is_file() and opened[0][1] is True
     assert opened[1] == (client.app.state.services.library.media_root, False)
+
+
+# ----------------------------------------------------------- custom request headers
+GUARD_HEADERS = "Referer: https://player.example/watch\nX-Token: abc123"
+
+
+def test_hls_stream_needs_its_headers_to_analyze(client, media_server):
+    url = f"{media_server['base']}/guarded/hls/index.m3u8"
+    r = client.post("/api/analyze", json={"url": url})
+    assert r.status_code == 422  # the CDN refuses requests without the player's headers
+    r = client.post("/api/analyze", json={"url": url, "headers": GUARD_HEADERS})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["type"] == "media" and data["formats"] and data["cached"] is False
+    # Results are cached per URL *and* headers, so the header-less failure doesn't shadow this.
+    assert client.post("/api/analyze", json={"url": url, "headers": GUARD_HEADERS}).json()["cached"] is True
+
+
+def test_analyze_rejects_malformed_headers(client, media_server):
+    r = client.post("/api/analyze", json={"url": f"{media_server['base']}/small.mp4", "headers": "no colon here"})
+    assert r.status_code == 422
+    r = client.post("/api/analyze", json={"url": f"{media_server['base']}/small.mp4", "headers": "Bad Name: x"})
+    assert r.status_code == 422
+
+
+def test_hls_download_with_headers_is_saved_on_the_job(client, media_server):
+    url = f"{media_server['base']}/guarded/hls/index.m3u8"
+    r = client.post("/api/downloads", json={"url": url, "kind": "video", "headers": GUARD_HEADERS})
+    assert r.status_code == 201, r.text
+    job = r.json()["items"][0]
+    assert job["options"]["headers"] == {"Referer": "https://player.example/watch", "X-Token": "abc123"}
+    done = wait_for(client, job["id"], {"completed", "failed"})
+    assert done["status"] == "completed", done
+    assert client.get(f"/api/media/{done['media_id']}").json()["size"] > 10_000
+
+
+def test_headers_survive_retry(client, media_server):
+    url = f"{media_server['base']}/guarded/small.mp4"
+    handler = media_server["handler"]
+    handler.fail_paths = {"/guarded/small.mp4"}
+    job_id = client.post("/api/downloads", json={"url": url, "kind": "video", "headers": GUARD_HEADERS}
+                         ).json()["items"][0]["id"]
+    assert wait_for(client, job_id, {"completed", "failed"})["status"] == "failed"
+    handler.fail_paths = set()
+    client.post(f"/api/downloads/{job_id}/retry")
+    done = wait_for(client, job_id, {"completed", "failed"})
+    assert done["status"] == "completed", done  # the retry still sent the Referer/X-Token
+
+
+def test_headers_survive_pause_and_resume(client, media_server):
+    url = f"{media_server['base']}/guarded/slow/large.mp4"
+    job_id = client.post("/api/downloads", json={"url": url, "kind": "video", "headers": GUARD_HEADERS}
+                         ).json()["items"][0]["id"]
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        j = client.get(f"/api/downloads/{job_id}").json()
+        if j["status"] == "downloading" and (j["downloaded_bytes"] or 0) > 1_000_000:
+            break
+        time.sleep(0.2)
+    client.post(f"/api/downloads/{job_id}/pause")
+    partial = wait_for(client, job_id, {"paused"}, timeout=15)["downloaded_bytes"]
+    client.post(f"/api/downloads/{job_id}/resume")
+    done = wait_for(client, job_id, {"completed", "failed"}, timeout=60)
+    assert done["status"] == "completed", done
+    assert partial > 0
+
+
+def test_headers_survive_restart(settings, media_server):
+    """A job interrupted by a crash is re-queued on the next start with its headers intact."""
+    from fastapi.testclient import TestClient
+    from app.db import Database
+    from app.main import create_app
+
+    with TestClient(create_app(settings)) as c:
+        job = c.post("/api/downloads", json={"url": f"{media_server['base']}/guarded/small.mp4", "kind": "video",
+                                             "headers": GUARD_HEADERS, "scheduled_at": time.time() + 3600}
+                     ).json()["items"][0]
+    db = Database(settings.db_path())
+    db.execute("UPDATE jobs SET status = 'downloading', scheduled_at = NULL WHERE id = ?", (job["id"],))
+    db.close()
+    with TestClient(create_app(settings)) as c:
+        done = wait_for(c, job["id"], {"completed", "failed"})
+        assert done["status"] == "completed", done
+        assert done["options"]["headers"]["Referer"] == "https://player.example/watch"

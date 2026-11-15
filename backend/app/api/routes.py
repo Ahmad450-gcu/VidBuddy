@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from ..engine import cookies, extractor
 from ..engine.errors import EngineError, classify
+from ..engine.headers import cache_key, parse_headers
 from ..engine.runtime import engine_versions
 from ..engine.security import UnsafeInputError, validate_template, validate_url
 from ..engine.sources import identify, supported_sites
@@ -97,23 +98,26 @@ def sources(q: str = Query("", max_length=60)) -> dict[str, Any]:
 async def analyze(body: S.AnalyzeRequest, svc: Services = Depends(services)) -> dict[str, Any]:
     try:
         url = await asyncio.to_thread(validate_url, body.url, allow_private=svc.settings.allow_private_networks)
+        headers = parse_headers(body.headers)
     except UnsafeInputError as e:
         raise _bad(e, 422)
-    cached = None if body.refresh else svc.db.one("SELECT data, created_at FROM info_cache WHERE url = ?", (url,))
+    key = cache_key(url, headers)
+    cached = None if body.refresh else svc.db.one("SELECT data, created_at FROM info_cache WHERE url = ?", (key,))
     if cached and time.time() - cached["created_at"] < svc.settings.info_cache_ttl:
         data = json.loads(cached["data"])
         data["cached"] = True
     else:
         try:
             data = await asyncio.wait_for(
-                asyncio.to_thread(extractor.analyze, url, max_playlist_items=svc.settings.max_playlist_items),
+                asyncio.to_thread(extractor.analyze, url, max_playlist_items=svc.settings.max_playlist_items,
+                                  headers=headers),
                 timeout=svc.settings.extract_timeout)
         except asyncio.TimeoutError:
             raise HTTPException(504, {"code": "timeout", "message": "The site took too long to respond. Try again."})
         except EngineError as e:
             raise HTTPException(422, {"code": e.code, "message": e.message, "detail": e.detail[:500]})
         svc.db.execute("INSERT OR REPLACE INTO info_cache(url, data, created_at) VALUES (?,?,?)",
-                       (url, json.dumps(data), time.time()))
+                       (key, json.dumps(data), time.time()))
         svc.db.execute("DELETE FROM info_cache WHERE created_at < ?", (time.time() - svc.settings.info_cache_ttl,))
         data["cached"] = False
     if data.get("type") == "media":
@@ -132,6 +136,8 @@ async def create_download(body: S.CreateDownloadRequest, svc: Services = Depends
     allow_private = svc.settings.allow_private_networks
     targets: list[tuple[str, str | None, str | None]] = []
     try:
+        headers = parse_headers(body.headers)
+        options = {**body.options.model_dump(), "headers": headers}
         if body.entries:
             for e in body.entries:
                 targets.append((validate_url(e.url, allow_private=allow_private, resolve=False), e.title, e.thumbnail))
@@ -140,7 +146,7 @@ async def create_download(body: S.CreateDownloadRequest, svc: Services = Depends
             targets.append((url, body.title, body.thumbnail))
         else:
             raise UnsafeInputError("Provide a url or a list of entries.")
-        jobs = [svc.jobs.create(url=u, kind=body.kind, options=body.options.model_dump(), title=t, thumbnail=th,
+        jobs = [svc.jobs.create(url=u, kind=body.kind, options=options, title=t, thumbnail=th,
                                 priority=body.priority, scheduled_at=body.scheduled_at,
                                 playlist_title=body.playlist_title)
                 for u, t, th in targets]

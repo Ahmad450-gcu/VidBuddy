@@ -195,3 +195,38 @@ def test_coursera_links_are_recognised():
     assert match_extractor("https://www.coursera.org/learn/python-operating-system") == "CourseraCourse"
     assert match_extractor("https://www.coursera.org/learn/python-operating-system/home/module/1") == "CourseraCourse"
     assert identify(lecture).name == "Coursera"
+
+
+def test_header_parsing_accepts_common_forms():
+    import pytest
+    from app.engine.headers import apply_headers, parse_headers
+    from app.engine.security import UnsafeInputError
+
+    assert parse_headers("") == {}
+    assert parse_headers("referer: https://a.example/\norigin: https://a.example") == {
+        "Referer": "https://a.example/", "Origin": "https://a.example"}
+    # a bare URL means Referer; DevTools pseudo-headers and connection headers are ignored
+    assert parse_headers("https://site.example/page\n:authority: cdn.example\nAccept-Encoding: br\nRange: bytes=5-") == {
+        "Referer": "https://site.example/page"}
+    assert parse_headers('{"Referer": "https://a.example/", "X-Key": 5}') == {"Referer": "https://a.example/", "X-Key": "5"}
+    bash = ("curl 'https://cdn.example/v/index.m3u8' \\n  -H 'accept: */*' \\n  -H 'referer: https://site.example/' \\n"
+            "  -H 'user-agent: Mozilla/5.0 Test' \\n  -b 'sid=1; t=2' --compressed")
+    assert parse_headers(bash) == {"Accept": "*/*", "Referer": "https://site.example/",
+                                   "User-Agent": "Mozilla/5.0 Test", "Cookie": "sid=1; t=2"}
+    cmd = ('curl ^"https://cdn.example/v/index.m3u8^" ^\n  -H ^"referer: https://site.example/^" ^\n'
+           '  -H ^"origin: https://site.example^"')
+    assert parse_headers(cmd) == {"Referer": "https://site.example/", "Origin": "https://site.example"}
+    for bad in ("just words", "Bad Name: x", "X: " + "a" * 9000, '["Referer"]'):
+        with pytest.raises(UnsafeInputError):
+            parse_headers(bad)
+    opts = apply_headers({"http_headers": {"Accept": "a"}}, {"Referer": "r"})
+    assert opts["http_headers"] == {"Accept": "a", "Referer": "r"}
+
+
+def test_download_options_keep_headers(tmp_path):
+    from app.engine.downloader import DownloadOptions, build_options
+
+    o = DownloadOptions.from_dict({"kind": "video", "headers": {"referer": "https://a.example/"}})
+    opts = build_options(o, home=tmp_path, temp=tmp_path)
+    assert opts["http_headers"]["Referer"] == "https://a.example/"
+    assert DownloadOptions.from_dict({"kind": "video"}).headers == {}  # jobs saved before this feature

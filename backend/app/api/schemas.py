@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class AnalyzeRequest(BaseModel):
     url: str = Field(min_length=4, max_length=4096)
     refresh: bool = False
+    headers: str = Field(default="", max_length=65536)  # optional request headers, raw text
 
 
 class DownloadOptionsIn(BaseModel):
@@ -42,6 +43,7 @@ class CreateDownloadRequest(BaseModel):
     scheduled_at: float | None = None
     entries: list[EntryIn] | None = Field(default=None, max_length=1000)
     playlist_title: str | None = Field(default=None, max_length=500)
+    headers: str = Field(default="", max_length=65536)  # optional request headers, raw text
 
 
 class JobPatch(BaseModel):

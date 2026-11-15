@@ -12,6 +12,7 @@ import type { AudioFormat, MediaKind, PlaylistAnalysis } from '../../lib/types'
 import { useDownloads } from '../../stores/downloads'
 import { usePrefs } from '../../stores/prefs'
 import { toast, toastError } from '../../stores/ui'
+import { useAnalysis } from './analysisStore'
 
 const QUALITIES = [
   ['best', 'Best available'],
@@ -59,6 +60,7 @@ export function PlaylistOptions({ data, onQueued }: { data: PlaylistAnalysis; on
         kind,
         entries: entries.map((e) => ({ url: e.url, title: e.title, thumbnail: e.thumbnail })),
         playlist_title: data.title,
+        headers: useAnalysis.getState().analyzedHeaders || undefined,
         options: {
           quality: kind === 'video' ? quality : 'best',
           container: prefs.default_container,

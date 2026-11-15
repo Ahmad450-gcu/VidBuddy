@@ -14,6 +14,7 @@ import { useDownloads } from '../../stores/downloads'
 import { usePrefs } from '../../stores/prefs'
 import { toast, toastError } from '../../stores/ui'
 import { estimateSize, initialSelection, LOSSLESS, toOptions, type Selection } from './selection'
+import { useAnalysis } from './analysisStore'
 
 type Tab = MediaKind | 'advanced'
 
@@ -45,6 +46,7 @@ export function MediaOptions({ data, onQueued }: { data: MediaAnalysis; onQueued
         options: toOptions(sel, prefs),
         priority: priorityTop ? 5 : 0,
         scheduled_at: scheduledAt ?? null,
+        headers: useAnalysis.getState().analyzedHeaders || undefined,
       })
       res.items.forEach(upsert)
       toast({

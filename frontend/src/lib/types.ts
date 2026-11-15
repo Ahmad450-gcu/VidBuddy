@@ -129,7 +129,7 @@ export interface Job {
   title: string | null
   thumbnail: string | null
   kind: MediaKind
-  options: DownloadOptions & { kind: MediaKind }
+  options: DownloadOptions & { kind: MediaKind; headers?: Record<string, string> }
   status: JobStatus
   priority: number
   progress: number

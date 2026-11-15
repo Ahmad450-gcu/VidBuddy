@@ -7,6 +7,7 @@ from typing import Any
 import yt_dlp
 
 from .errors import EngineError, classify
+from .headers import apply_headers
 from . import cookies, coursera, gdrive
 from .runtime import ffmpeg_location
 from .sources import browser_fallbacks, identify, install_browser_choice, remember_browser, tune_for, use_browser
@@ -188,8 +189,12 @@ def _subtitle_langs(info: dict[str, Any]) -> dict[str, list[str]]:
     }
 
 
-def analyze(url: str, *, timeout: int = 30, max_playlist_items: int = 500) -> dict[str, Any]:
-    """Return a normalized description of what can be downloaded from ``url``."""
+def analyze(url: str, *, timeout: int = 30, max_playlist_items: int = 500,
+            headers: dict[str, str] | None = None) -> dict[str, Any]:
+    """Return a normalized description of what can be downloaded from ``url``.
+
+    ``headers`` (Referer, Origin, ...) are sent with every request, for streams that need them.
+    """
     source = identify(url)
     logger = _QuietLogger()
     opts = base_options(timeout)
@@ -202,6 +207,7 @@ def analyze(url: str, *, timeout: int = 30, max_playlist_items: int = 500) -> di
         "lazy_playlist": False,
     })
     tune_for(url, opts, source.extractor if source.extractor != "Generic" else None)
+    apply_headers(opts, headers)
     fallbacks: list[str] | None = None
     while True:
         try:

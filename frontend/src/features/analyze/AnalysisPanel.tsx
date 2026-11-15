@@ -16,6 +16,7 @@ const HINTS: Record<string, string> = {
   blocked: 'The site is rate limiting automated access from this server. Wait a few minutes.',
   rate_limited: 'Too many requests in a short time. Wait a moment.',
   offline: 'The VidBuddy server is unreachable.',
+  forbidden: "If this is a stream that plays on another site, add that page's address as the Referer under Request headers.",
 }
 
 export function AnalysisPanel() {
