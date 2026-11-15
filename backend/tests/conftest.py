@@ -47,6 +47,22 @@ def _make_media() -> dict[str, Path]:
                         "-hls_time", "1", "-hls_list_size", "0", "-hls_segment_filename", str(hls / "seg%d.ts"),
                         str(hls / "index.m3u8")], check=True)
     out["hls"] = hls / "index.m3u8"
+    # Audio in its own rendition and no CODECS in the master playlist, as many web players do.
+    split = ASSETS / "hls_split"
+    if not (split / "master.m3u8").exists():
+        split.mkdir(exist_ok=True)
+        subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=duration=4:size=320x240:rate=15",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", "-f", "hls", "-hls_list_size", "0",
+                        "-hls_segment_filename", str(split / "v%d.ts"), str(split / "video.m3u8")], check=True)
+        subprocess.run([ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
+                        "-c:a", "aac", "-vn", "-f", "hls", "-hls_list_size", "0",
+                        "-hls_segment_filename", str(split / "a%d.aac"), str(split / "audio.m3u8")], check=True)
+        (split / "master.m3u8").write_text(
+            "#EXTM3U\n"
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",LANGUAGE="eng",NAME="English",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"\n'
+            '#EXT-X-STREAM-INF:BANDWIDTH=400000,RESOLUTION=320x240,AUDIO="aud"\n'
+            "video.m3u8\n")
+    out["hls_split"] = split / "master.m3u8"
     out["page"].write_text("<html><head><title>No media here</title></head><body><p>Just text.</p></body></html>")
     return out
 
@@ -92,7 +108,7 @@ class _Handler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_response(200)
         ctype = {".html": "text/html", ".m3u8": "application/vnd.apple.mpegurl",
-                 ".ts": "video/mp2t"}.get(f.suffix, "video/mp4")
+                 ".ts": "video/mp2t", ".aac": "audio/aac"}.get(f.suffix, "video/mp4")
         self.send_header("Content-Type", ctype)
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Content-Length", str(end - start + 1))

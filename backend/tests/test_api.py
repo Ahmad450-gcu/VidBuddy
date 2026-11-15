@@ -422,3 +422,28 @@ def test_headers_survive_restart(settings, media_server):
         done = wait_for(c, job["id"], {"completed", "failed"})
         assert done["status"] == "completed", done
         assert done["options"]["headers"]["Referer"] == "https://player.example/watch"
+
+
+def test_hls_with_separate_audio_track_keeps_sound(client, media_server, tmp_path):
+    """Video variants + an audio rendition (no CODECS listed) must merge into a file with sound."""
+    import json
+    import subprocess
+    from pathlib import Path
+    from app.engine.runtime import ffmpeg_location
+
+    url = f"{media_server['base']}/hls_split/master.m3u8"
+    data = client.post("/api/analyze", json={"url": url}).json()
+    assert data["presets"]["has_audio"] and data["presets"]["video"]
+    job = client.post("/api/downloads", json={"url": url, "kind": "video",
+                                              "options": {"quality": data["presets"]["video"][0]["id"]}}).json()["items"][0]
+    done = wait_for(client, job["id"], {"completed", "failed"})
+    assert done["status"] == "completed", done
+    target = tmp_path / "probe.mp4"
+    target.write_bytes(client.get(f"/api/media/{done['media_id']}/stream").content)
+    ff = Path(ffmpeg_location())
+    ff = ff if ff.is_dir() else ff.parent
+    probe = next(p for p in (ff / "ffprobe.exe", ff / "ffprobe") if p.exists())
+    out = subprocess.run([str(probe), "-v", "error", "-show_streams", "-of", "json", str(target)],
+                         capture_output=True, text=True).stdout
+    kinds = [st["codec_type"] for st in json.loads(out)["streams"]]
+    assert "video" in kinds and "audio" in kinds, kinds

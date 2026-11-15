@@ -8,13 +8,14 @@ import yt_dlp
 
 from .errors import EngineError, classify
 from .headers import apply_headers
-from . import cookies, coursera, gdrive
+from . import cookies, coursera, gdrive, hlsfix
 from .runtime import ffmpeg_location
 from .sources import browser_fallbacks, identify, install_browser_choice, remember_browser, tune_for, use_browser
 
 log = logging.getLogger("haul.extractor")
 gdrive.install()
 coursera.register()
+hlsfix.install()
 install_browser_choice()
 
 AUDIO_TARGETS = [
