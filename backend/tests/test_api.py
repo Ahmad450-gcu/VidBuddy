@@ -575,3 +575,154 @@ def test_audio_track_is_validated(client, media_server):
     r = client.post("/api/downloads", json={"url": f"{media_server['base']}/small.mp4", "kind": "video",
                                             "options": {"audio_format_id": "140+251"}})
     assert r.status_code == 422
+
+
+# --------------------------------------------------------------- Udemy
+UDEMY_COURSE = "https://www.udemy.com/course/figma-basics/"
+UDEMY_LECTURE = UDEMY_COURSE + "learn/lecture/39758752#overview"
+
+
+def _fake_udemy(monkeypatch, media_server, *, drm=False, enrolled=True, outline_refused=False):
+    """Answer Udemy's API the way it does for an enrolled learner, with a local test video."""
+    from yt_dlp.utils import ExtractorError
+    from app.engine import udemy
+
+    calls = []
+
+    def call_api(self, origin, path, video_id, note, query=None):
+        calls.append(path)
+        assert origin == "https://www.udemy.com"
+        if path == "courses/figma-basics/":
+            return {"id": 5603440, "title": "Figma Basics"}
+        if path.startswith("courses/5603440/") and "curriculum-items" in path:
+            if outline_refused and "public" not in path:
+                raise ExtractorError(udemy.NOT_ENROLLED, expected=True)
+            return {"next": None, "results": [
+                {"_class": "chapter", "title": "Getting started", "object_index": 1},
+                {"_class": "lecture", "id": 39758752, "title": "Introduction", "asset": {"asset_type": "Video"}},
+                {"_class": "lecture", "id": 39758753, "title": "Resource file", "asset": {"asset_type": "File"}},
+                {"_class": "chapter", "title": "Tools", "object_index": 2},
+                {"_class": "lecture", "id": 39758754, "title": "Basic tools", "asset": {"asset_type": "Video"}},
+            ]}
+        if path.startswith("users/me/subscribed-courses/5603440/lectures/"):
+            if not enrolled:
+                raise ExtractorError(udemy.NOT_ENROLLED, expected=True)
+            sources = ([{"type": "application/dash+xml", "src": f"{media_server['base']}/nope.mpd"}] if drm else
+                       [{"type": "video/mp4", "label": "240", "src": f"{media_server['base']}/small.mp4"}])
+            return {"title": "Introduction", "object_index": 1, "asset": {
+                "asset_type": "Video", "length": 3, "media_sources": sources, "course_is_drmed": drm,
+                "media_license_token": "token" if drm else None, "captions": []}}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(udemy._UdemyBase, "_call_api", call_api)
+    udemy._cache.clear()
+    return calls
+
+
+def test_udemy_lecture_downloads(client, media_server, monkeypatch):
+    _fake_udemy(monkeypatch, media_server)
+    data = client.post("/api/analyze", json={"url": UDEMY_LECTURE}).json()
+    assert data["type"] == "media" and data["source"]["name"] == "Udemy", data
+    assert data["title"] == "Introduction"
+    job = client.post("/api/downloads", json={"url": UDEMY_LECTURE, "kind": "video"}).json()["items"][0]
+    done = wait_for(client, job["id"], {"completed", "failed"})
+    assert done["status"] == "completed", done
+
+
+def test_udemy_course_lists_its_video_lectures(client, media_server, monkeypatch):
+    _fake_udemy(monkeypatch, media_server)
+    data = client.post("/api/analyze", json={"url": UDEMY_COURSE}).json()
+    assert data["type"] == "playlist", data
+    assert data["title"] == "Figma Basics"
+    assert [e["title"] for e in data["entries"]] == ["Introduction", "Basic tools"]  # the file is skipped
+    assert [e["url"] for e in data["entries"]] == [UDEMY_COURSE + "learn/lecture/39758752", UDEMY_COURSE + "learn/lecture/39758754"]
+
+
+def test_udemy_drm_and_enrolment_are_explained(client, media_server, monkeypatch):
+    _fake_udemy(monkeypatch, media_server, drm=True)
+    r = client.post("/api/analyze", json={"url": UDEMY_LECTURE})
+    assert r.status_code == 422 and r.json()["detail"]["code"] == "drm", r.text
+    _fake_udemy(monkeypatch, media_server, enrolled=False)
+    r = client.post("/api/analyze", json={"url": UDEMY_LECTURE, "refresh": True})
+    assert r.status_code == 422 and "isn't enrolled" in r.json()["detail"]["message"], r.text
+
+
+def test_udemy_course_outline_falls_back_to_the_public_one(client, media_server, monkeypatch):
+    calls = _fake_udemy(monkeypatch, media_server, outline_refused=True)
+    data = client.post("/api/analyze", json={"url": UDEMY_COURSE}).json()
+    assert [e["title"] for e in data["entries"]] == ["Introduction", "Basic tools"], data
+    assert [c.split("/")[2] for c in calls if "curriculum" in c] == [
+        "subscriber-curriculum-items", "cached-subscriber-curriculum-items", "public-curriculum-items"]
+
+
+# --------------------------------------------------------------- course numbering, folders, clips
+def _duration(path):
+    import json
+    import subprocess
+    from pathlib import Path
+    from app.engine.runtime import ffmpeg_location
+
+    ff = Path(ffmpeg_location())
+    ff = ff if ff.is_dir() else ff.parent
+    probe = next(p for p in (ff / "ffprobe.exe", ff / "ffprobe") if p.exists())
+    out = subprocess.run([str(probe), "-v", "error", "-show_format", "-of", "json", str(path)],
+                         capture_output=True, text=True).stdout
+    return float(json.loads(out)["format"]["duration"])
+
+
+def test_course_downloads_are_numbered_in_a_course_folder(client, media_server):
+    from pathlib import Path
+
+    entries = [{"url": f"{media_server['base']}/small.mp4?lecture={i}", "title": t, "index": i}
+               for i, t in ((2, "Basics"), (10, "Wrap up"))]
+    r = client.post("/api/downloads", json={"entries": entries, "kind": "video", "playlist_title": "Figma: UI/UX",
+                                            "playlist_size": 12, "organize": True,
+                                            "options": {"filename_template": "%(title)s.%(ext)s"}})
+    jobs = r.json()["items"]
+    assert [j["options"]["playlist_index"] for j in jobs] == [2, 10]
+    names = []
+    for j in jobs:
+        done = wait_for(client, j["id"], {"completed", "failed"})
+        assert done["status"] == "completed", done
+        media = client.get(f"/api/media/{done['media_id']}").json()
+        names.append(media["filename"])
+        assert Path(media["folder"]).name == "Figma_ UI_UX"
+    assert names == ["02. small.mp4", "10. small.mp4"]  # sorts in course order
+
+
+def test_playlist_without_organize_keeps_plain_names(client, media_server):
+    r = client.post("/api/downloads", json={"entries": [{"url": f"{media_server['base']}/small.mp4?p", "index": 3}],
+                                            "kind": "video", "playlist_title": "Mix"})
+    job = r.json()["items"][0]
+    assert job["options"]["playlist_index"] is None and job["options"]["folder"] is None
+
+
+def test_download_folder_can_be_changed(client, media_server, tmp_path):
+    from pathlib import Path
+
+    target = tmp_path / "My Videos"
+    r = client.put("/api/settings", json={"download_dir": str(target)})
+    assert r.status_code == 200 and r.json()["download_dir"] == str(target.resolve())
+    job = client.post("/api/downloads", json={"url": f"{media_server['base']}/small.mp4?dir", "kind": "video"}).json()["items"][0]
+    done = wait_for(client, job["id"], {"completed", "failed"})
+    assert done["status"] == "completed", done
+    media = client.get(f"/api/media/{done['media_id']}").json()
+    assert Path(media["folder"]) == target.resolve()
+    assert client.get(f"/api/media/{media['id']}/stream").status_code == 200
+    assert client.put("/api/settings", json={"download_dir": "relative/folder"}).status_code == 422
+    assert client.put("/api/settings", json={"download_dir": ""}).json()["download_dir"] == ""
+
+
+def test_only_part_of_a_video_is_downloaded(client, media_server):
+    from pathlib import Path
+
+    job = client.post("/api/downloads", json={"url": f"{media_server['base']}/large.mp4", "kind": "video", "options": {
+        "section_start": 2, "section_end": 8}}).json()["items"][0]
+    done = wait_for(client, job["id"], {"completed", "failed"}, timeout=120)
+    assert done["status"] == "completed", done
+    media = client.get(f"/api/media/{done['media_id']}").json()
+    assert "[00-00-02 to 00-00-08]" in media["filename"]
+    assert _duration(Path(media["folder"]) / media["filename"]) < 12  # the source is 20 s
+    bad = client.post("/api/downloads", json={"url": f"{media_server['base']}/large.mp4", "kind": "video",
+                                              "options": {"section_start": 9, "section_end": 3}})
+    assert bad.status_code == 422

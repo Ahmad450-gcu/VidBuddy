@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Field, Input, Segmented, Select, Switch } from '../../components/ui/Controls'
 import { Badge, Skeleton } from '../../components/ui/Feedback'
 import { api, connection } from '../../lib/api'
-import { install, isDesktop, supports } from '../../lib/platform'
+import { canPickFolder, install, isDesktop, pickFolder, supports } from '../../lib/platform'
 import type { AudioFormat, Container, MediaKind, Preferences, SystemInfo } from '../../lib/types'
 import { usePrefs } from '../../stores/prefs'
 import { CookiesSection } from './CookiesSection'
@@ -46,6 +46,70 @@ function previewTemplate(t: string) {
     ext: 'mp4', duration_string: '3:41', artist: 'Nature Films', album: 'Timelapses',
   }
   return t.replace(/%\(([^)]+)\)(0?\d*)?[sd]/g, (_, f: string) => sample[f] ?? `{${f}}`)
+}
+
+function DownloadFolder({ current, libraryRoot, save }: {
+  current: string
+  libraryRoot: string | null
+  save: (patch: Partial<Preferences>) => Promise<unknown>
+}) {
+  const [path, setPath] = useState(current)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => setPath(current), [current])
+
+  const apply = async (value: string) => {
+    setBusy(true)
+    try {
+      await save({ download_dir: value })
+      toast({ tone: 'success', title: value ? 'Downloads will be saved there' : 'Back to the default folder', body: value || undefined })
+    } catch (e) {
+      toastError(e, "Couldn't use that folder")
+      setPath(current)
+    } finally {
+      setBusy(false)
+    }
+  }
+  const browse = async () => {
+    const picked = await pickFolder(path || libraryRoot || '')
+    if (picked) {
+      setPath(picked)
+      await apply(picked)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <Field
+        label="Download folder"
+        hint={current ? 'Files you downloaded before stay where they are.' : `Default: ${libraryRoot ? `${libraryRoot} (video and audio subfolders)` : 'the VidBuddy library folder'}`}
+      >
+        <div className="flex flex-wrap gap-2">
+          <Input
+            value={path}
+            onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && path !== current && apply(path)}
+            placeholder={libraryRoot ?? 'D:\\Videos'}
+            className="min-w-0 flex-1 font-mono"
+            spellCheck={false}
+            aria-label="Download folder"
+          />
+          {canPickFolder() && (
+            <Button variant="secondary" icon={<FolderOpen size={16} />} onClick={browse} disabled={busy}>
+              Browse…
+            </Button>
+          )}
+          <Button variant="primary" disabled={path.trim() === current} loading={busy} onClick={() => apply(path)}>
+            Save
+          </Button>
+        </div>
+      </Field>
+      {current && (
+        <button className="text-[12.5px] font-medium text-fg-2 hover:text-fg" onClick={() => apply('')} disabled={busy}>
+          Use the default folder
+        </button>
+      )}
+    </div>
+  )
 }
 
 export function SettingsPage() {
@@ -161,6 +225,10 @@ export function SettingsPage() {
               </div>
             </>
           )}
+        </Section>
+
+        <Section title="Save to" description="The folder new downloads are saved in. Courses and playlists get a numbered folder of their own inside it.">
+          {loaded && <DownloadFolder current={prefs.download_dir} libraryRoot={sys?.media_root ?? null} save={save} />}
         </Section>
 
         <Section title="File names" description="Uses yt-dlp template fields. Folders and other fields are rejected for safety.">

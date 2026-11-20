@@ -15,6 +15,7 @@ export const DEFAULT_PREFS: Preferences = {
   embed_metadata: true,
   embed_thumbnail: true,
   skip_duplicates: false,
+  download_dir: '',
 }
 
 interface PrefsState {

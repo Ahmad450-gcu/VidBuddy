@@ -227,6 +227,14 @@ def main() -> int:
                 self._full = bool(on)
                 window.toggle_fullscreen()
 
+        def pick_folder(self, start: str = "") -> str | None:
+            """Windows' own folder picker, for choosing where downloads are saved."""
+            start_dir = start if start and Path(start).is_dir() else str(media_dir())
+            picked = window.create_file_dialog(webview.FOLDER_DIALOG, directory=start_dir)
+            if not picked:
+                return None
+            return str(picked[0] if isinstance(picked, (list, tuple)) else picked)
+
     window = webview.create_window(
         APP_NAME,
         f"{base}/?desktop_token={token}",

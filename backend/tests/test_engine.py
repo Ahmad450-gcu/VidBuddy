@@ -276,3 +276,61 @@ def test_format_spec_with_audio_track():
     for bad in ("a+b", "a/b", "a b", "x" * 100):
         with pytest.raises(UnsafeInputError):
             spec(kind="video", audio_format_id=bad)
+
+
+def test_udemy_links_are_recognised():
+    from app.engine import extractor  # noqa: F401  (registers the extractors)
+    from app.engine.sources import identify, match_extractor
+    from app.engine.udemy import _UdemyBase
+
+    lecture = "https://www.udemy.com/course/figma-for-ui/learn/lecture/39758752#overview"
+    assert match_extractor(lecture) == "UdemyLecture"
+    assert match_extractor("https://www.udemy.com/course/figma-for-ui/learn/v4/t/lecture/39758752") == "UdemyLecture"
+    assert match_extractor("https://acme.udemy.com/course/figma-for-ui/learn/lecture/1") == "UdemyLecture"
+    assert match_extractor("https://www.udemy.com/course/figma-for-ui/") == "UdemyCourse"
+    assert match_extractor("https://www.udemy.com/course/figma-for-ui/learn/") == "UdemyCourse"
+    assert identify(lecture).name == "Udemy"
+    # Udemy's API saying no (JSON) vs. an anti-bot page (HTML), which the browser retry handles
+    assert _UdemyBase._is_api_answer(b'{"detail": "Authentication credentials were not provided."}')
+    assert not _UdemyBase._is_api_answer(b"<!DOCTYPE html><title>Just a moment...</title>")
+
+
+def test_numbering_sections_and_live_options(tmp_path):
+    import pytest
+    from app.engine.downloader import DownloadOptions, build_options, folder_name
+    from app.engine.security import UnsafeInputError
+
+    def tmpl(**kw):
+        return build_options(DownloadOptions(filename_template="%(title)s.%(ext)s", **kw), home=tmp_path,
+                             temp=tmp_path)["outtmpl"]["default"]
+
+    assert tmpl(playlist_index=1, playlist_size=24) == "01. %(title)s.%(ext)s"
+    assert tmpl(playlist_index=7, playlist_size=256) == "007. %(title)s.%(ext)s"
+    assert tmpl(section_start=3600, section_end=5400.5) == "%(title)s [01-00-00 to 01-30-00].%(ext)s"
+    assert tmpl(section_start=90) == "%(title)s [00-01-30 to end].%(ext)s"
+    opts = build_options(DownloadOptions(section_start=10, section_end=20), home=tmp_path, temp=tmp_path)
+    assert opts["live_from_start"] is True
+    assert list(opts["download_ranges"]({}, None)) == [{"start_time": 10.0, "end_time": 20.0}]
+    assert list(opts["download_ranges"]({"is_live": True}, None)) == [{}]  # lives are cut by segment
+    assert opts["_vb_live_range"] == (10.0, 20.0)
+    assert "download_ranges" not in build_options(DownloadOptions(section_start=0), home=tmp_path, temp=tmp_path)
+    with pytest.raises(UnsafeInputError):
+        tmpl(section_start=50, section_end=40)
+    assert folder_name("Figma: UI/UX?") == "Figma_ UI_UX_"
+    assert folder_name("  ") is None and folder_name("..") is None
+
+
+def test_live_range_keeps_only_the_segments_inside_it():
+    from app.engine.liverange import clip
+
+    def stream():  # a live stream with 2-second segments, endless like a real one
+        n = 0
+        while True:
+            yield {"url": f"https://rr.example/videoplayback?sq={n}&itag=136", "fragment_count": n + 1}
+            n += 1
+
+    got = list(clip(stream(), start=3600, end=3610, duration=2))
+    assert [g["url"].split("sq=")[1].split("&")[0] for g in got] == ["1800", "1801", "1802", "1803", "1804"]
+    assert all(g["fragment_count"] == 5 for g in got)
+    open_ended = clip(stream(), start=10, end=None, duration=5)
+    assert next(open_ended)["url"].startswith("https://rr.example/videoplayback?sq=2&")

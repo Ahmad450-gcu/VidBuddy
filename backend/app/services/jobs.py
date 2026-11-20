@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from ..db import Database
-from ..engine.downloader import DownloadOptions, JobInterrupted, Progress, build_options, run_download
+from ..engine.downloader import (DownloadOptions, JobInterrupted, Progress, build_options, folder_name,
+                                 run_download)
 from ..engine.errors import RETRYABLE, EngineError, classify
 from ..engine.security import UnsafeInputError
 from ..engine.sources import identify
@@ -99,7 +100,9 @@ class JobManager:
 
     def _dispatch_ready(self) -> None:
         with self._flags_lock:
-            active = len(self._stop_flags)
+            # A job that was paused or cancelled gives its slot back at once, even if its worker
+            # is still finishing a request (reading the page can take a while on some sites).
+            active = sum(1 for reason in self._stop_flags.values() if reason is None)
         slots = self.concurrency - active
         if slots <= 0:
             return
@@ -123,6 +126,14 @@ class JobManager:
         with self._flags_lock:
             return job_id in self._stop_flags and self._stop_flags[job_id] is None
 
+    def download_home(self, options: DownloadOptions) -> Path:
+        """Where a job's file goes: the chosen download folder (or the library's video/audio
+        folder), plus a folder named after the playlist or course it came from."""
+        chosen = (self.db.get_setting("download_dir", "") or "").strip()
+        home = Path(chosen) if chosen else self.library.media_root / options.kind
+        sub = folder_name(options.folder)
+        return home / sub if sub else home
+
     def _stop_reason(self, job_id: str) -> str | None:
         with self._flags_lock:
             return self._stop_flags.get(job_id)
@@ -133,7 +144,7 @@ class JobManager:
             return
         temp = self.temp_root / job_id
         options = DownloadOptions.from_dict(job["options"])
-        home = self.library.media_root / options.kind
+        home = self.download_home(options)
         last_db = [0.0]
 
         def on_progress(p: Progress) -> None:
@@ -232,6 +243,7 @@ class JobManager:
                thumbnail: str | None = None, priority: int = 0, scheduled_at: float | None = None,
                playlist_title: str | None = None) -> dict[str, Any]:
         opts = DownloadOptions.from_dict({**options, "kind": kind})
+        opts.folder = folder_name(opts.folder)
         build_options(opts, home=self.library.media_root, temp=self.temp_root)  # validates eagerly
         options_json = json.dumps(opts.__dict__, sort_keys=True)
         # Identical request already in flight (double tap, re-shared link): reuse it.

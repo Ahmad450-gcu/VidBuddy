@@ -8,13 +8,14 @@ import yt_dlp
 
 from .errors import EngineError, classify
 from .headers import apply_headers
-from . import cookies, coursera, gdrive, hlsfix
+from . import cookies, coursera, gdrive, hlsfix, udemy
 from .runtime import ffmpeg_location
 from .sources import browser_fallbacks, identify, install_browser_choice, remember_browser, tune_for, use_browser
 
 log = logging.getLogger("haul.extractor")
 gdrive.install()
 coursera.register()
+udemy.register()
 hlsfix.install()
 install_browser_choice()
 
@@ -206,6 +207,7 @@ def analyze(url: str, *, timeout: int = 30, max_playlist_items: int = 500,
         "noplaylist": False,
         "playlistend": max_playlist_items,
         "lazy_playlist": False,
+        "live_from_start": True,  # list a live stream's formats that start at its beginning
     })
     tune_for(url, opts, source.extractor if source.extractor != "Generic" else None)
     apply_headers(opts, headers)
@@ -264,8 +266,9 @@ def analyze(url: str, *, timeout: int = 30, max_playlist_items: int = 500,
             "warnings": logger.warnings[-5:],
         }
 
-    if info.get("is_live"):
-        raise EngineError("live", "Live streams that haven't finished can't be downloaded yet.")
+    if info.get("live_status") == "is_upcoming":
+        raise EngineError("live", "This live stream hasn't started yet. Try again once it's live.")
+    live = bool(info.get("is_live")) or info.get("live_status") == "post_live"
     duration = info.get("duration")
     raw_formats = info.get("formats") or ([info] if info.get("url") else [])
     formats = [normalize_format(f, duration) for f in raw_formats
@@ -283,6 +286,9 @@ def analyze(url: str, *, timeout: int = 30, max_playlist_items: int = 500,
         "uploader": info.get("uploader") or info.get("channel") or info.get("artist"),
         "thumbnail": _thumb(info),
         "duration": duration,
+        "is_live": live,
+        # when it went live, so the app can tell how long it has been running
+        "live_started_at": (info.get("release_timestamp") or info.get("timestamp")) if live else None,
         "upload_date": info.get("upload_date"),
         "view_count": info.get("view_count"),
         "description": (info.get("description") or "")[:1200],

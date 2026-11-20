@@ -28,6 +28,7 @@ const AUDIO: AudioFormat[] = ['mp3', 'm4a', 'opus', 'aac', 'flac', 'wav']
 export function PlaylistOptions({ data, onQueued }: { data: PlaylistAnalysis; onQueued: () => void }) {
   const prefs = usePrefs((s) => s.prefs)
   const [selected, setSelected] = useState<Set<number>>(() => new Set(data.entries.map((e) => e.index)))
+  const [organize, setOrganize] = useState(true)
   const [kind, setKind] = useState<MediaKind>(prefs.default_kind)
   const [quality, setQuality] = useState<string>(prefs.default_quality)
   const [audioFormat, setAudioFormat] = useState<AudioFormat>(prefs.default_audio_format)
@@ -58,8 +59,10 @@ export function PlaylistOptions({ data, onQueued }: { data: PlaylistAnalysis; on
     try {
       const res = await api.createDownload({
         kind,
-        entries: entries.map((e) => ({ url: e.url, title: e.title, thumbnail: e.thumbnail })),
+        entries: entries.map((e) => ({ url: e.url, title: e.title, thumbnail: e.thumbnail, index: e.index })),
         playlist_title: data.title,
+        playlist_size: data.entries.length,
+        organize,
         headers: useAnalysis.getState().analyzedHeaders || undefined,
         options: {
           quality: kind === 'video' ? quality : 'best',
@@ -177,7 +180,13 @@ export function PlaylistOptions({ data, onQueued }: { data: PlaylistAnalysis; on
         {!visible.length && <li className="border-t border-line px-5 py-8 text-center text-[13px] text-fg-3">No items match "{filter}".</li>}
       </ul>
 
-      <footer className="flex items-center justify-end gap-3 border-t border-line px-4 py-3 md:px-5">
+      <footer className="flex flex-wrap items-center justify-end gap-3 border-t border-line px-4 py-3 md:px-5">
+        <label className="mr-auto flex min-w-0 items-center gap-2 text-[12.5px] text-fg-2">
+          <input type="checkbox" checked={organize} onChange={(e) => setOrganize(e.target.checked)} className="size-4 shrink-0 accent-[var(--accent)]" />
+          <span className="min-w-0">
+            Number the files (01, 02, …) and save them in a <span className="font-medium text-fg">{data.title}</span> folder
+          </span>
+        </label>
         <Button variant="primary" icon={<Download size={16} />} disabled={!selected.size} loading={busy} onClick={queue}>
           Download {selected.size ? plural(selected.size, 'item') : ''}
         </Button>

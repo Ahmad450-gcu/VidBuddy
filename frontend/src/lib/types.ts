@@ -69,6 +69,9 @@ export interface MediaAnalysis {
   uploader: string | null
   thumbnail: string | null
   duration: number | null
+  /** A live stream that is still running (it's recorded from its start). */
+  is_live?: boolean
+  live_started_at?: number | null
   upload_date: string | null
   view_count: number | null
   description: string
@@ -122,6 +125,13 @@ export interface DownloadOptions {
   filename_template?: string | null
   /** A specific audio track (format id) to merge with the video; null = best audio. */
   audio_format_id?: string | null
+  /** Only part of the media, in seconds (null = from the start / to the end). */
+  section_start?: number | null
+  section_end?: number | null
+  /** Set for course/playlist items saved numbered in their own folder. */
+  playlist_index?: number | null
+  playlist_size?: number | null
+  folder?: string | null
 }
 
 export interface Job {
@@ -228,6 +238,8 @@ export interface Preferences {
   embed_metadata: boolean
   embed_thumbnail: boolean
   skip_duplicates: boolean
+  /** Where downloads are saved; "" = the library folder. */
+  download_dir: string
 }
 
 export interface SystemInfo {

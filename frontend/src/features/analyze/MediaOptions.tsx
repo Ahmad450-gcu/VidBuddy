@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CalendarClock, Check, ChevronDown, Download, ExternalLink, Film, Music2, Play, SlidersHorizontal } from 'lucide-react'
+import { CalendarClock, Check, ChevronDown, Download, ExternalLink, Film, Music2, Play, Radio, SlidersHorizontal } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Chip, Field, Segmented, Select, Switch } from '../../components/ui/Controls'
 import { Dialog } from '../../components/ui/Dialog'
@@ -13,7 +13,7 @@ import type { AudioFormat, Container, Format, MediaAnalysis, MediaKind } from '.
 import { useDownloads } from '../../stores/downloads'
 import { usePrefs } from '../../stores/prefs'
 import { toast, toastError } from '../../stores/ui'
-import { audioTracks, estimateSize, initialSelection, LOSSLESS, toOptions, trackLabel, type Selection } from './selection'
+import { audioTracks, clipRange, estimateSize, formatClock, initialSelection, LOSSLESS, toOptions, trackLabel, type Selection } from './selection'
 import { useAnalysis } from './analysisStore'
 
 type Tab = MediaKind | 'advanced'
@@ -30,6 +30,8 @@ export function MediaOptions({ data, onQueued }: { data: MediaAnalysis; onQueued
   const update = (patch: Partial<Selection>) => setSel((s) => ({ ...s, ...patch }))
   const size = useMemo(() => estimateSize(data, sel), [data, sel])
   const existing = data.existing?.[sel.kind]
+  const range = clipRange(sel, data.duration)
+  const rangeError = typeof range === 'string' ? range : null
   const subtitleLangs = useMemo(
     () => [...new Set([...data.subtitles.manual, ...data.subtitles.automatic])],
     [data.subtitles],
@@ -77,6 +79,12 @@ export function MediaOptions({ data, onQueued }: { data: MediaAnalysis; onQueued
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
             <Badge tone="accent">{data.source.name}</Badge>
+            {data.is_live && (
+              <Badge tone="danger">
+                <Radio size={11} className="mr-1 inline" />
+                Live now
+              </Badge>
+            )}
             {data.cached && <Badge>Cached</Badge>}
           </div>
           <h2 className="line-clamp-2 text-[15px] font-semibold leading-snug md:text-base">{data.title}</h2>
@@ -120,6 +128,7 @@ export function MediaOptions({ data, onQueued }: { data: MediaAnalysis; onQueued
           {tab === 'audio' && <AudioPanel data={data} sel={sel} update={update} />}
           {tab === 'advanced' && <AdvancedPanel data={data} sel={sel} update={update} />}
         </div>
+        <ClipPicker data={data} sel={sel} update={update} error={rangeError} />
       </div>
 
       <footer className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-line bg-surface-1 px-4 py-3 md:px-5">
@@ -135,12 +144,65 @@ export function MediaOptions({ data, onQueued }: { data: MediaAnalysis; onQueued
         <Button variant="ghost" size="md" icon={<CalendarClock size={16} />} onClick={() => setScheduleOpen(true)}>
           Later
         </Button>
-        <Button variant="primary" size="md" icon={<Download size={16} />} loading={busy} onClick={() => queue()} className="w-full sm:w-auto">
-          Download
+        <Button variant="primary" size="md" icon={<Download size={16} />} loading={busy} disabled={!!rangeError} onClick={() => queue()} className="w-full sm:w-auto">
+          {data.is_live ? 'Record' : 'Download'}
         </Button>
       </footer>
       <ScheduleDialog open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSchedule={(t) => queue(t)} />
     </section>
+  )
+}
+
+/** Download only part of a long video, or of a live stream (recorded from its start). */
+function ClipPicker({ data, sel, update, error }: {
+  data: MediaAnalysis
+  sel: Selection
+  update: (p: Partial<Selection>) => void
+  error: string | null
+}) {
+  const liveFor = data.is_live && data.live_started_at ? Math.max(0, Date.now() / 1000 - data.live_started_at) : null
+  const length = data.duration ?? liveFor
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <Switch
+        checked={sel.clipOn}
+        onChange={(clipOn) => update({ clipOn })}
+        label={data.is_live ? 'Record only part of the stream' : 'Download only part of it'}
+        description={data.is_live ? 'Pick a start and end time, e.g. one hour of a 10-hour stream.' : 'Pick a start and end time instead of the whole thing.'}
+      />
+      {sel.clipOn && (
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-end gap-3">
+            <Field label="From">
+              <input
+                value={sel.clipStart}
+                onChange={(e) => update({ clipStart: e.target.value })}
+                placeholder="0:00:00"
+                inputMode="numeric"
+                aria-label="Start time"
+                className="h-9 w-32 rounded-md bg-surface-2 px-3 text-[13px] tabular ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </Field>
+            <Field label="To">
+              <input
+                value={sel.clipEnd}
+                onChange={(e) => update({ clipEnd: e.target.value })}
+                placeholder={data.is_live ? 'until it ends' : length ? formatClock(length) : 'the end'}
+                inputMode="numeric"
+                aria-label="End time"
+                className="h-9 w-32 rounded-md bg-surface-2 px-3 text-[13px] tabular ring-1 ring-line focus:outline-none focus:ring-2 focus:ring-accent"
+              />
+            </Field>
+          </div>
+          <p className={cn('text-[12px]', error ? 'text-danger' : 'text-fg-3')}>
+            {error ??
+              (data.is_live
+                ? `Times count from the start of the stream${liveFor ? ` (live for ${formatClock(liveFor)})` : ''}. Leave "To" empty to record until the stream ends.`
+                : 'Use h:mm:ss, e.g. 1:30:00. Leave a box empty for the start or the end.')}
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
 

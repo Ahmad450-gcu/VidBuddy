@@ -13,6 +13,10 @@ export interface Selection {
   embedThumbnail: boolean
   /** Audio-only format id to merge in (one language of several); null = the best audio. */
   audioTrack: string | null
+  /** Download only part of it: start/end as typed ("1:05:00"), "" = start / end of the media. */
+  clipOn: boolean
+  clipStart: string
+  clipEnd: string
 }
 
 export const LOSSLESS: AudioFormat[] = ['flac', 'wav']
@@ -39,6 +43,9 @@ export function initialSelection(a: MediaAnalysis, prefs: Preferences): Selectio
     autoSubtitles: !a.subtitles.manual.includes(preferredLang),
     embedThumbnail: prefs.embed_thumbnail,
     audioTrack: null,
+    clipOn: !!a.is_live,
+    clipStart: '',
+    clipEnd: '',
   }
 }
 
@@ -55,11 +62,58 @@ export function toOptions(sel: Selection, prefs: Pick<Preferences, 'embed_metada
     embed_thumbnail: sel.embedThumbnail,
     filename_template: prefs.filename_template,
     audio_format_id: sel.audioTrack,
+    ...clipOptions(sel),
   }
+}
+
+/** "1:02:03", "62:03", "3723" or "1h2m3s" → seconds; null for empty, NaN when it can't be read. */
+export function parseClock(text: string): number | null {
+  const t = text.trim().toLowerCase()
+  if (!t) return null
+  const units = t.match(/^(?:(\d+(?:\.\d+)?)h)?\s*(?:(\d+(?:\.\d+)?)m)?\s*(?:(\d+(?:\.\d+)?)s?)?$/)
+  if (units && /[hms]/.test(t)) return Number(units[1] ?? 0) * 3600 + Number(units[2] ?? 0) * 60 + Number(units[3] ?? 0)
+  const parts = t.split(':')
+  if (parts.length > 3 || parts.some((x) => !/^\d+(\.\d+)?$/.test(x))) return NaN
+  return parts.reduce((total, x) => total * 60 + Number(x), 0)
+}
+
+/** 3723 → "1:02:03" */
+export function formatClock(seconds: number): string {
+  const s = Math.floor(seconds)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = String(s % 60).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
+}
+
+/** The chosen range, or why it can't be used (null = the whole thing). */
+export function clipRange(sel: Selection, duration: number | null): { start: number; end: number | null } | string | null {
+  if (!sel.clipOn) return null
+  const start = parseClock(sel.clipStart) ?? 0
+  const end = parseClock(sel.clipEnd)
+  if (Number.isNaN(start)) return 'Enter the start as h:mm:ss, e.g. 1:30:00'
+  if (end !== null && Number.isNaN(end)) return 'Enter the end as h:mm:ss, e.g. 2:15:00'
+  if (end !== null && end <= start) return 'The end must be after the start'
+  if (duration && start >= duration) return `It's only ${formatClock(duration)} long`
+  if (start === 0 && end === null) return null
+  return { start, end: end !== null && duration && end >= duration ? null : end }
+}
+
+function clipOptions(sel: Selection): Partial<DownloadOptions> {
+  const range = clipRange(sel, null)
+  return range && typeof range === 'object' ? { section_start: range.start, section_end: range.end } : {}
 }
 
 /** Estimated output size in bytes for the current selection, or null when unknown. */
 export function estimateSize(a: MediaAnalysis, sel: Selection): number | null {
+  const full = estimateFullSize(a, sel)
+  const range = clipRange(sel, a.duration)
+  if (!full || !range || typeof range !== 'object' || !a.duration) return range && typeof range === 'object' && !a.duration ? null : full
+  const part = ((range.end ?? a.duration) - range.start) / a.duration
+  return Math.round(full * Math.min(1, Math.max(0, part)))
+}
+
+function estimateFullSize(a: MediaAnalysis, sel: Selection): number | null {
   if (sel.kind === 'audio') {
     if (!a.duration) return a.presets.audio.size_estimate
     if (sel.audioFormat === 'wav') return Math.round(a.duration * 44100 * 2 * 2)

@@ -14,6 +14,7 @@ import type { Job } from '../../lib/types'
 import { jobActions } from '../../stores/downloads'
 import { usePlayer } from '../../stores/player'
 import { toast, toastError } from '../../stores/ui'
+import { formatClock } from '../analyze/selection'
 import { canPreview, useLivePreview } from './liveStore'
 
 const STAGE_LABEL: Record<string, string> = {
@@ -118,6 +119,11 @@ export const JobRow = memo(function JobRow({ job }: { job: Job }) {
           {job.playlist_title && <span className="truncate">· {job.playlist_title}</span>}
           <Badge className="ml-0.5 shrink-0">{job.kind === 'audio' ? job.options.audio_format.toUpperCase() : job.options.container.toUpperCase()}</Badge>
           {job.options.quality?.startsWith('h') && job.kind === 'video' && <Badge className="shrink-0">≤{job.options.quality.slice(1)}p</Badge>}
+          {(job.options.section_start != null || job.options.section_end != null) && (
+            <Badge className="shrink-0 tabular">
+              {formatClock(job.options.section_start ?? 0)}–{job.options.section_end != null ? formatClock(job.options.section_end) : 'end'}
+            </Badge>
+          )}
           {job.options.audio_format_id && (
             <Badge className="max-w-28 shrink truncate">
               {job.options.audio_format_id}

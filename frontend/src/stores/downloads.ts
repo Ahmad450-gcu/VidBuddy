@@ -34,7 +34,15 @@ export const useDownloads = create<DownloadsState>((set, get) => ({
     for (const j of res.items) jobs[j.id] = j
     set({ jobs, loaded: true, concurrency: res.concurrency })
   },
-  upsert: (job) => set((s) => ({ jobs: { ...s.jobs, [job.id]: job } })),
+  // Keep whichever copy is newer. A request's reply can arrive after the live events about the
+  // same job: the server queues a download and starts it within milliseconds, so the "started"
+  // event lands first and the "queued" reply to the click must not overwrite it.
+  upsert: (job) =>
+    set((s) => {
+      const cur = s.jobs[job.id]
+      if (cur && cur.updated_at > job.updated_at) return s
+      return { jobs: { ...s.jobs, [job.id]: job } }
+    }),
   patch: (id, fields) => {
     const cur = get().jobs[id]
     if (!cur) return

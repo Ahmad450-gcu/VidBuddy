@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Job, MediaItem } from '../lib/types'
-import { groupJobs } from './downloads'
+import { groupJobs, useDownloads } from './downloads'
 import { usePlayer } from './player'
 
 const job = (id: string, status: Job['status'], extra: Partial<Job> = {}): Job =>
@@ -65,5 +65,18 @@ describe('audio player queue', () => {
     const s = usePlayer.getState()
     expect(s.queue.map((t) => t.id)).toEqual(['2', '3'])
     expect(s.queue[s.index].id).toBe('2')
+  })
+})
+
+describe('download list', () => {
+  it("doesn't let a late reply show a started download as queued again", () => {
+    const job = { id: 'race', status: 'queued', updated_at: 100 } as Job
+    const { upsert, patch } = useDownloads.getState()
+    upsert(job) // "job created" event
+    patch('race', { status: 'downloading', stage: 'starting', updated_at: 100.02 }) // started at once
+    upsert(job) // the reply to the click arrives last, still saying "queued"
+    expect(useDownloads.getState().jobs.race.status).toBe('downloading')
+    upsert({ ...job, status: 'paused', updated_at: 101 }) // a genuinely newer state still applies
+    expect(useDownloads.getState().jobs.race.status).toBe('paused')
   })
 })

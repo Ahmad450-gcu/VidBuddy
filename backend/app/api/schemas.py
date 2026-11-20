@@ -26,12 +26,15 @@ class DownloadOptionsIn(BaseModel):
     max_filesize_mb: int = Field(default=0, ge=0, le=1_000_000)
     rate_limit_kbps: int = Field(default=0, ge=0, le=10_000_000)
     audio_format_id: str | None = Field(default=None, max_length=80)  # audio track to merge in
+    section_start: float | None = Field(default=None, ge=0, le=10_000 * 3600)  # seconds; only part of it
+    section_end: float | None = Field(default=None, gt=0, le=10_000 * 3600)
 
 
 class EntryIn(BaseModel):
     url: str = Field(max_length=4096)
     title: str | None = Field(default=None, max_length=500)
     thumbnail: str | None = Field(default=None, max_length=4096)
+    index: int | None = Field(default=None, ge=1, le=99999)  # position in the playlist/course
 
 
 class CreateDownloadRequest(BaseModel):
@@ -44,6 +47,9 @@ class CreateDownloadRequest(BaseModel):
     scheduled_at: float | None = None
     entries: list[EntryIn] | None = Field(default=None, max_length=1000)
     playlist_title: str | None = Field(default=None, max_length=500)
+    playlist_size: int | None = Field(default=None, ge=1, le=99999)
+    # number the files by playlist position and save them in a folder named after the playlist
+    organize: bool = False
     headers: str = Field(default="", max_length=65536)  # optional request headers, raw text
 
 
@@ -96,6 +102,7 @@ class SettingsPatch(BaseModel):
     embed_metadata: bool | None = None
     embed_thumbnail: bool | None = None
     skip_duplicates: bool | None = None
+    download_dir: str | None = Field(default=None, max_length=1000)  # "" = the library folder
 
 
 class CookiesUpload(BaseModel):

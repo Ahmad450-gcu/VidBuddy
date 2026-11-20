@@ -18,6 +18,7 @@ import yt_dlp
 
 from .errors import EngineError, classify
 from .extractor import _QuietLogger, base_options
+from . import liverange
 from .headers import apply_headers, clean_headers
 from .security import UnsafeInputError, validate_template
 from .sources import browser_fallbacks, remember_browser, tune_for, use_browser
@@ -70,6 +71,7 @@ def install_audio_first() -> None:
 
 
 install_audio_first()
+liverange.install()
 
 
 class JobInterrupted(Exception):
@@ -97,6 +99,14 @@ class DownloadOptions:
     # A specific audio track (format id) to merge with the video, e.g. one language of several.
     # None = the best audio. Falls back to the best audio if the site stops offering that track.
     audio_format_id: str | None = None
+    # Position in a playlist/course ("01. Introduction") and the playlist's length (for padding).
+    playlist_index: int | None = None
+    playlist_size: int | None = None
+    # Sub-folder (the playlist or course name) inside the download folder.
+    folder: str | None = None
+    # Only this part of the media, in seconds from the start (None = from the start / to the end).
+    section_start: float | None = None
+    section_end: float | None = None
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "DownloadOptions":
@@ -130,6 +140,39 @@ def _audio_track(o: DownloadOptions) -> str | None:
     if not _FORMAT_ID.match(aid) or "+" in aid or "/" in aid:
         raise UnsafeInputError("Invalid audio track.")
     return aid
+
+
+def _clock(seconds: float) -> str:
+    s = int(seconds)
+    return f"{s // 3600:02d}-{s % 3600 // 60:02d}-{s % 60:02d}"
+
+
+def section(o: DownloadOptions) -> tuple[float, float | None] | None:
+    """The requested time range, validated; None for the whole media."""
+    start, end = o.section_start, o.section_end
+    if start is None and end is None:
+        return None
+    try:
+        start = float(start or 0)
+        end = None if end is None else float(end)
+    except (TypeError, ValueError):
+        raise UnsafeInputError("Invalid time range.") from None
+    if start < 0 or (end is not None and (end <= start or end > 10_000 * 3600)) or start > 10_000 * 3600:
+        raise UnsafeInputError("The end time must be after the start time.")
+    if start == 0 and end is None:
+        return None
+    return start, end
+
+
+def folder_name(name: str | None) -> str | None:
+    """A playlist/course title made safe to use as one folder name."""
+    from .security import sanitize_filename
+
+    name = (name or "").strip()
+    if not name:
+        return None
+    clean = sanitize_filename(name, max_len=100, fallback="").strip(" .")
+    return clean or None
 
 
 def format_spec(o: DownloadOptions) -> tuple[str, list[str]]:
@@ -169,8 +212,19 @@ def build_options(o: DownloadOptions, *, home: Path, temp: Path) -> dict[str, An
         raise UnsafeInputError("Unsupported audio format.")
     template = validate_template(o.filename_template)
     aid = _audio_track(o)
+    stem = template[: -len(".%(ext)s")]
     if aid:  # each language gets its own file instead of reusing the one already downloaded
-        template = template[: -len(".%(ext)s")] + f" [{aid}].%(ext)s"
+        stem += f" [{aid}]"
+    cut = section(o)
+    if cut:  # each clip gets its own file too
+        stem += f" [{_clock(cut[0])} to {_clock(cut[1]) if cut[1] is not None else 'end'}]"
+    if o.playlist_index is not None:
+        index = int(o.playlist_index)
+        if not 0 < index < 100000:
+            raise UnsafeInputError("Invalid playlist position.")
+        width = max(2, len(str(int(o.playlist_size or 0))))
+        stem = f"{index:0{width}d}. {stem}"  # files sort in course order: "01. Introduction"
+    template = stem + ".%(ext)s"
     o.headers = clean_headers(o.headers)
     fmt, sort = format_spec(o)
     opts = base_options(30)
@@ -190,6 +244,12 @@ def build_options(o: DownloadOptions, *, home: Path, temp: Path) -> dict[str, An
         "trim_file_name": 200,
     })
     apply_headers(opts, o.headers)
+    # A live stream is recorded from its beginning (YouTube keeps it), not from "now".
+    opts["live_from_start"] = True
+    if cut:
+        start, end = cut
+        opts["download_ranges"] = liverange.Ranges(start, end)
+        opts[liverange.PARAM] = (start, end)  # live streams: only the segments in the range
     pps: list[dict[str, Any]] = opts["postprocessors"]
     if o.max_filesize_mb > 0:
         opts["max_filesize"] = o.max_filesize_mb * 1024 * 1024

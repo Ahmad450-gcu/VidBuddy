@@ -103,8 +103,11 @@ export interface CreateDownload {
   options: Partial<DownloadOptions>
   priority?: number
   scheduled_at?: number | null
-  entries?: { url: string; title?: string; thumbnail?: string | null }[]
+  entries?: { url: string; title?: string; thumbnail?: string | null; index?: number }[]
   playlist_title?: string | null
+  playlist_size?: number
+  /** Number the files by playlist position and save them in a folder named after the playlist. */
+  organize?: boolean
   /** Optional request headers (raw text: `Name: value` lines, a cURL command, ...). */
   headers?: string
 }

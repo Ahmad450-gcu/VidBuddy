@@ -32,6 +32,23 @@ export function initDesktop() {
   }
 }
 
+type DesktopBridge = { pick_folder?: (start: string) => Promise<string | null> }
+const bridge = () => (window as unknown as { pywebview?: { api?: DesktopBridge } }).pywebview?.api
+
+/** The Windows app can show its own folder picker. */
+export function canPickFolder(): boolean {
+  return isDesktop()
+}
+
+/** Ask the Windows app for a folder; null if cancelled or unavailable. */
+export async function pickFolder(start: string): Promise<string | null> {
+  try {
+    return (await bridge()?.pick_folder?.(start)) ?? null
+  } catch {
+    return null
+  }
+}
+
 /** True inside the VidBuddy Windows app (files are already on this computer). */
 export function isDesktop(): boolean {
   try {

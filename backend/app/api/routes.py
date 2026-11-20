@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,7 @@ DEFAULT_PREFS: dict[str, Any] = {
     "embed_metadata": True,
     "embed_thumbnail": True,
     "skip_duplicates": False,
+    "download_dir": "",  # where downloads are saved; "" = the library folder
 }
 
 
@@ -88,7 +90,9 @@ def open_media_folder(svc: Services = Depends(services)) -> None:
     _desktop_only(svc)
     from ..engine.runtime import reveal_in_explorer
 
-    reveal_in_explorer(svc.library.media_root, select=False)
+    chosen = (svc.db.get_setting("download_dir", "") or "").strip()
+    folder = Path(chosen) if chosen and Path(chosen).is_dir() else svc.library.media_root
+    reveal_in_explorer(folder, select=False)
 
 
 @router.get("/sources")
@@ -140,22 +144,27 @@ def list_downloads(status: str | None = None, svc: Services = Depends(services))
 @router.post("/downloads", status_code=201, dependencies=[Depends(rate_limited)])
 async def create_download(body: S.CreateDownloadRequest, svc: Services = Depends(services)) -> dict[str, Any]:
     allow_private = svc.settings.allow_private_networks
-    targets: list[tuple[str, str | None, str | None]] = []
+    targets: list[tuple[str, str | None, str | None, dict[str, Any]]] = []
     try:
         headers = parse_headers(body.headers)
         options = {**body.options.model_dump(), "headers": headers}
         if body.entries:
-            for e in body.entries:
-                targets.append((validate_url(e.url, allow_private=allow_private, resolve=False), e.title, e.thumbnail))
+            organize = body.organize and bool(body.playlist_title)
+            size = body.playlist_size or max([e.index or 0 for e in body.entries] + [len(body.entries)])
+            for n, e in enumerate(body.entries, 1):
+                extra = ({"playlist_index": e.index or n, "playlist_size": size, "folder": body.playlist_title}
+                         if organize else {})
+                targets.append((validate_url(e.url, allow_private=allow_private, resolve=False), e.title,
+                                e.thumbnail, extra))
         elif body.url:
             url = await asyncio.to_thread(validate_url, body.url, allow_private=allow_private)
-            targets.append((url, body.title, body.thumbnail))
+            targets.append((url, body.title, body.thumbnail, {}))
         else:
             raise UnsafeInputError("Provide a url or a list of entries.")
-        jobs = [svc.jobs.create(url=u, kind=body.kind, options=options, title=t, thumbnail=th,
+        jobs = [svc.jobs.create(url=u, kind=body.kind, options={**options, **extra}, title=t, thumbnail=th,
                                 priority=body.priority, scheduled_at=body.scheduled_at,
                                 playlist_title=body.playlist_title)
-                for u, t, th in targets]
+                for u, t, th, extra in targets]
     except UnsafeInputError as e:
         raise _bad(e, 422)
     return {"items": jobs}
@@ -553,6 +562,24 @@ def cleanup_temp(svc: Services = Depends(services)):
 
 
 # ------------------------------------------------------------------- settings
+def check_download_dir(raw: str) -> str:
+    """A folder the app can write to, as a full path; "" means the library's own folder."""
+    raw = (raw or "").strip().strip('"')
+    if not raw:
+        return ""
+    p = Path(raw).expanduser()
+    if not p.is_absolute():
+        raise UnsafeInputError("Enter a full folder path, such as D:\\Videos.")
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        probe = p / f".vidbuddy-write-test-{os.getpid()}"
+        probe.write_bytes(b"")
+        probe.unlink()
+    except OSError:
+        raise UnsafeInputError("VidBuddy can't save files in that folder. Pick another one.") from None
+    return str(p.resolve())
+
+
 @router.get("/settings")
 def get_settings_(svc: Services = Depends(services)):
     return {k: svc.db.get_setting(k, v) for k, v in DEFAULT_PREFS.items()}
@@ -561,6 +588,11 @@ def get_settings_(svc: Services = Depends(services)):
 @router.put("/settings")
 def put_settings(body: S.SettingsPatch, svc: Services = Depends(services)):
     values = body.model_dump(exclude_none=True)
+    if "download_dir" in values:
+        try:
+            values["download_dir"] = check_download_dir(values["download_dir"])
+        except UnsafeInputError as e:
+            raise _bad(e, 422)
     if "filename_template" in values:
         try:
             values["filename_template"] = validate_template(values["filename_template"])

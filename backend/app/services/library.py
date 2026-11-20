@@ -47,10 +47,18 @@ class Library:
 
     # ------------------------------------------------------------------ paths
     def abs_path(self, rel: str) -> Path:
+        # Files saved to a download folder the user chose are stored by their full path
+        # (only the app itself writes these rows); everything else is relative to the library.
+        if Path(rel).is_absolute():
+            return Path(rel)
         return safe_join(self.media_root, rel)
 
     def rel_path(self, p: Path) -> str:
-        return p.resolve().relative_to(self.media_root).as_posix()
+        p = p.resolve()
+        try:
+            return p.relative_to(self.media_root).as_posix()
+        except ValueError:
+            return p.as_posix()
 
     # ---------------------------------------------------------------- serialize
     def serialize(self, row: dict[str, Any] | None) -> dict[str, Any] | None:

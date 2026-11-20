@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MediaAnalysis } from '../../lib/types'
 import { DEFAULT_PREFS } from '../../stores/prefs'
-import { audioTracks, estimateSize, initialSelection, toOptions, trackLabel } from './selection'
+import { audioTracks, clipRange, estimateSize, formatClock, initialSelection, parseClock, toOptions, trackLabel } from './selection'
 
 const analysis = (over: Partial<MediaAnalysis> = {}): MediaAnalysis => ({
   type: 'media',
@@ -84,5 +84,28 @@ describe('audio track', () => {
     expect(toOptions(sel, DEFAULT_PREFS)).toMatchObject({ quality: 'fmt:600', audio_format_id: 'aac-6._Hindi' })
     expect(estimateSize(multi, sel)).toBe(41_500_000)
     expect(toOptions({ ...sel, audioTrack: null }, DEFAULT_PREFS).audio_format_id).toBeNull()
+  })
+})
+
+describe('download only part of it', () => {
+  it('reads times the way people type them', () => {
+    expect(parseClock('1:02:03')).toBe(3723)
+    expect(parseClock('62:03')).toBe(3723)
+    expect(parseClock('90')).toBe(90)
+    expect(parseClock('1h30m')).toBe(5400)
+    expect(parseClock(' ')).toBeNull()
+    expect(parseClock('abc')).toBeNaN()
+    expect(formatClock(3723)).toBe('1:02:03')
+    expect(formatClock(75)).toBe('1:15')
+  })
+
+  it('turns the range into options and explains mistakes', () => {
+    const base = { ...initialSelection(analysis(), DEFAULT_PREFS), clipOn: true }
+    expect(toOptions({ ...base, clipStart: '1:00:00', clipEnd: '2:00:00' }, DEFAULT_PREFS)).toMatchObject({ section_start: 3600, section_end: 7200 })
+    expect(toOptions({ ...base, clipStart: '10:00' }, DEFAULT_PREFS)).toMatchObject({ section_start: 600, section_end: null })
+    expect(toOptions({ ...base, clipOn: false, clipStart: '10:00' }, DEFAULT_PREFS).section_start).toBeUndefined()
+    expect(clipRange({ ...base, clipStart: '5:00', clipEnd: '4:00' }, null)).toBe('The end must be after the start')
+    expect(clipRange({ ...base, clipStart: 'x' }, null)).toMatch(/start/)
+    expect(clipRange(base, null)).toBeNull() // nothing typed: the whole thing
   })
 })

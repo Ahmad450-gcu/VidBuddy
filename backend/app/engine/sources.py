@@ -77,7 +77,7 @@ _PRETTY = {
     "youtube": "YouTube", "youtubetab": "YouTube", "dailymotion": "Dailymotion", "vimeo": "Vimeo",
     "twitter": "X / Twitter", "tiktok": "TikTok", "instagram": "Instagram", "facebook": "Facebook",
     "soundcloud": "SoundCloud", "bandcamp": "Bandcamp", "twitch": "Twitch", "reddit": "Reddit",
-    "generic": "Web", "courseralecture": "Coursera", "courseracourse": "Coursera", "bilibili": "Bilibili", "archiveorg": "Internet Archive", "peertube": "PeerTube",
+    "generic": "Web", "courseralecture": "Coursera", "courseracourse": "Coursera", "udemylecture": "Udemy", "udemycourse": "Udemy", "bilibili": "Bilibili", "archiveorg": "Internet Archive", "peertube": "PeerTube",
 }
 
 

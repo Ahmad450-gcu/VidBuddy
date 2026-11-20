@@ -11,6 +11,9 @@ Supported links:
 """
 from __future__ import annotations
 
+import threading
+import time
+
 from yt_dlp.extractor.common import InfoExtractor
 from yt_dlp.networking.exceptions import HTTPError
 from yt_dlp.utils import ExtractorError, int_or_none, traverse_obj, url_or_none
@@ -18,6 +21,23 @@ from yt_dlp.utils import ExtractorError, int_or_none, traverse_obj, url_or_none
 API = "https://www.coursera.org/api"
 NEEDS_SIGN_IN = ("Coursera: this lecture needs a signed-in, enrolled account. Add sign-in cookies "
                  "from coursera.org in Settings (sign in to Coursera in a private window, then export).")
+
+
+_CACHE_SECONDS = 600
+_cache: dict[str, tuple[float, object]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cached(key: str, load):
+    now = time.monotonic()
+    with _cache_lock:
+        hit = _cache.get(key)
+        if hit and now - hit[0] < _CACHE_SECONDS:
+            return hit[1]
+    value = load()
+    with _cache_lock:
+        _cache[key] = (now, value)
+    return value
 
 
 class _CourseraBase(InfoExtractor):
@@ -30,6 +50,12 @@ class _CourseraBase(InfoExtractor):
             raise
 
     def _course(self, slug: str) -> dict:
+        return _cached(f"course/{slug}", lambda: self._load_course(slug))
+
+    def _items(self, slug: str) -> list[dict]:
+        return _cached(f"items/{slug}", lambda: self._load_items(slug))
+
+    def _load_course(self, slug: str) -> dict:
         data = self._api("onDemandCourses.v1", slug, "Reading course",
                          {"q": "slug", "slug": slug, "fields": "id,name"})
         course = traverse_obj(data, ("elements", 0, {dict}))
@@ -37,7 +63,7 @@ class _CourseraBase(InfoExtractor):
             raise ExtractorError("Coursera: this course wasn't found.", expected=True)
         return course
 
-    def _items(self, slug: str) -> list[dict]:
+    def _load_items(self, slug: str) -> list[dict]:
         data = self._api("onDemandCourseMaterials.v2/", slug, "Reading course outline", {
             "q": "slug", "slug": slug, "includes": "modules,lessons,items",
             "fields": "onDemandCourseMaterialItems.v2(name,slug,contentSummary,lessonId,moduleId),"
